@@ -21,7 +21,14 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        filesDir // Ensure internal storage is initialized
+        filesDir  
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!MonitorService.isServiceRunning) {
+            startMonitorService()
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -65,7 +72,6 @@ class MainActivity : FlutterActivity() {
                     }.start()
                 }
                 "getSystemInfo" -> {
-                    // Ambil data Context-dependent di Main Thread untuk mencegah crash
                     val metrics = resources.displayMetrics
                     val resolution = "${metrics.widthPixels}x${metrics.heightPixels}"
                     val bm = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
@@ -176,7 +182,6 @@ class MainActivity : FlutterActivity() {
 
     private fun isDaemonRunning(): Boolean {
         return try {
-            // Cek menggunakan pidof, pgrep, atau ps sebagai fallback
             val cmd = "pidof autd > /dev/null || pgrep -x autd > /dev/null || ps -A | grep autd | grep -v grep > /dev/null"
             val p = Runtime.getRuntime().exec(arrayOf("su", "-mm", "-c", cmd))
             val exitCode = p.waitFor()
@@ -221,7 +226,6 @@ class MainActivity : FlutterActivity() {
                 return Pair(name, output)
             }
         } catch (e: Exception) {
-            // Fallthrough to return No Root
         }
         return Pair("No Root", "Access Denied")
     }
@@ -246,7 +250,7 @@ class MainActivity : FlutterActivity() {
     private fun getTotalRAM(): String {
         return try {
             val reader = BufferedReader(FileReader("/proc/meminfo"))
-            val line = reader.readLine() // MemTotal:        5866664 kB
+            val line = reader.readLine() 
             reader.close()
             val parts = line.split("\\s+".toRegex())
             if (parts.size > 1) {
@@ -271,7 +275,7 @@ class MainActivity : FlutterActivity() {
                 val parts = line!!.split("\\s+".toRegex())
                 if (parts.size < 2) continue
                 val key = parts[0].replace(":", "")
-                val value = parts[1].toLong() // in kB
+                val value = parts[1].toLong() 
                 
                 if (key == "MemTotal") total = value / 1024 // to MB
                 if (key == "MemAvailable") available = value / 1024 // to MB
@@ -287,7 +291,6 @@ class MainActivity : FlutterActivity() {
 
     private fun readFileContent(path: String?): String {
         if (path == null) return ""
-        // Try normal read first
         try {
             val f = File(path)
             if (f.exists() && f.canRead()) {
@@ -295,7 +298,6 @@ class MainActivity : FlutterActivity() {
             }
         } catch (e: Exception) { /* ignore */ }
         
-        // Fallback to root
         return try {
             val p = Runtime.getRuntime().exec(arrayOf("su", "-mm", "-c", "cat \"$path\""))
             val reader = BufferedReader(InputStreamReader(p.inputStream))

@@ -59,7 +59,6 @@ class MonitorService : Service() {
         try {
             unregisterReceiver(screenReceiver)
         } catch (e: Exception) {
-            // Receiver might not be registered or already unregistered
         }
     }
 
@@ -76,7 +75,7 @@ class MonitorService : Service() {
                 if (!f.exists()) return@Thread
 
                 val cmd = "$DAEMON_PATH > /dev/null 2>&1 &"
-                Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+                Runtime.getRuntime().exec(arrayOf("su", "-mm", "-c", cmd))
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -86,7 +85,7 @@ class MonitorService : Service() {
     private fun isDaemonRunning(): Boolean {
         return try {
             val cmd = "pidof autd > /dev/null || pgrep -x autd > /dev/null || ps -A | grep autd | grep -v grep > /dev/null"
-            val p = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+            val p = Runtime.getRuntime().exec(arrayOf("su", "-mm", "-c", cmd))
             val exitCode = p.waitFor()
             exitCode == 0
         } catch (e: Exception) {

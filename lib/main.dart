@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:installed_apps/app_info.dart';
@@ -111,6 +112,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   // Animation
   late final AnimationController _shadowController;
+  late PageController _pageController;
 
   @override
   void initState() {
@@ -120,6 +122,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     _checkDaemonStatus();
     _checkToggles();
     _checkAutdAvailability();
+    _pageController = PageController(initialPage: _selectedIndex);
     
     _ramTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
       if (_selectedIndex == 2) _fetchRamStats();
@@ -142,6 +145,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   @override
   void dispose() {
     _shadowController.dispose();
+    _pageController.dispose();
     _ramTimer?.cancel();
     _tuningTimer?.cancel();
     _daemonMethodTimer?.cancel();
@@ -476,6 +480,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           builder: (context, scrollController) {
             return _AddAppSheetContent(
               scrollController: scrollController,
+              existingApps: _configuredApps.map((e) => e.app.packageName).toList(),
               onAppSelected: (packageName) {
                 Navigator.pop(context);
                 _addAppToConfig(packageName);
@@ -561,25 +566,20 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
     return Scaffold(
       extendBody: true, // Penting agar navbar bisa floating di atas konten
-      body: NotificationListener<UserScrollNotification>(
-        onNotification: (notification) {
-          if (notification.direction == ScrollDirection.forward) {
-            if (!_isBottomBarVisible) setState(() => _isBottomBarVisible = true);
-          } else if (notification.direction == ScrollDirection.reverse) {
-            if (_isBottomBarVisible) setState(() => _isBottomBarVisible = false);
-          }
-          return true;
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (index) {
+          setState(() {
+            _selectedIndex = index;
+            _isBottomBarVisible = true;
+          });
         },
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 60, 24, 120),
-          child: _selectedIndex == 0 
-              ? _buildHomeContent(context, colorScheme)
-              : (_selectedIndex == 1
-                  ? _buildTuningContent(context, colorScheme)
-                  : (_selectedIndex == 2
-                      ? _buildTweaksContent(context, colorScheme)
-                      : _buildAppManagerContent(context, colorScheme))),
-        ),
+        children: [
+          _buildPageWrapper(_buildHomeContent(context, colorScheme)),
+          _buildPageWrapper(_buildTuningContent(context, colorScheme)),
+          _buildPageWrapper(_buildTweaksContent(context, colorScheme)),
+          if (_isAutdAvailable) _buildPageWrapper(_buildAppManagerContent(context, colorScheme)),
+        ],
       ),
       floatingActionButton: (_selectedIndex == 3 && _isAutdAvailable)
           ? FloatingActionButton(
@@ -627,6 +627,25 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildPageWrapper(Widget child) {
+    return NotificationListener<UserScrollNotification>(
+      onNotification: (notification) {
+        if (notification.metrics.axis == Axis.vertical) {
+          if (notification.direction == ScrollDirection.forward) {
+            if (!_isBottomBarVisible) setState(() => _isBottomBarVisible = true);
+          } else if (notification.direction == ScrollDirection.reverse) {
+            if (_isBottomBarVisible) setState(() => _isBottomBarVisible = false);
+          }
+        }
+        return true;
+      },
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 60, 24, 120),
+        child: child,
       ),
     );
   }
@@ -1296,7 +1315,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     final colorScheme = Theme.of(context).colorScheme;
 
     return GestureDetector(
-      onTap: () => setState(() => _selectedIndex = index),
+      onTap: () {
+        setState(() => _selectedIndex = index);
+        _pageController.animateToPage(index, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: EdgeInsets.symmetric(horizontal: isSelected ? 20 : 16, vertical: 12),
@@ -1331,9 +1353,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
 class _AddAppSheetContent extends StatefulWidget {
   final ScrollController scrollController;
+  final List<String> existingApps;
   final Function(String) onAppSelected;
 
-  const _AddAppSheetContent({required this.scrollController, required this.onAppSelected});
+  const _AddAppSheetContent({required this.scrollController, required this.existingApps, required this.onAppSelected});
 
   @override
   State<_AddAppSheetContent> createState() => _AddAppSheetContentState();
@@ -1344,6 +1367,7 @@ class _AddAppSheetContentState extends State<_AddAppSheetContent> {
   List<AppInfo> _filteredApps = [];
   bool _loading = true;
   final TextEditingController _searchController = TextEditingController();
+  final Map<String, Uint8List> _iconCache = {};
 
   @override
   void initState() {
@@ -1354,16 +1378,33 @@ class _AddAppSheetContentState extends State<_AddAppSheetContent> {
 
   Future<void> _loadApps() async {
     final apps = await InstalledApps.getInstalledApps(
-      excludeSystemApps: false,
+      excludeSystemApps: true,
       excludeNonLaunchableApps: true,
-      withIcon: true,
+      withIcon: false,
     );
     if (mounted) {
       setState(() {
-        _allApps = apps;
+        _allApps = apps.where((app) => !widget.existingApps.contains(app.packageName)).toList();
         _filteredApps = _allApps;
         _loading = false;
       });
+      _preloadIcons();
+    }
+  }
+
+  Future<void> _preloadIcons() async {
+    for (final app in _allApps) {
+      if (!mounted) return;
+      try {
+        final info = await InstalledApps.getAppInfo(app.packageName);
+        if (info?.icon != null) {
+          _iconCache[app.packageName] = info!.icon!;
+          if (mounted) setState(() {});
+        }
+      } catch (e) {
+        // ignore
+      }
+      await Future.delayed(Duration.zero);
     }
   }
 
@@ -1400,9 +1441,16 @@ class _AddAppSheetContentState extends State<_AddAppSheetContent> {
                   itemBuilder: (context, index) {
                     final app = _filteredApps[index];
                     return ListTile(
-                      leading: app.icon != null
-                          ? Image.memory(app.icon!, width: 40, height: 40)
-                          : const Icon(Icons.android, size: 40),
+                      leading: _iconCache.containsKey(app.packageName)
+                          ? Image.memory(_iconCache[app.packageName]!, width: 40, height: 40)
+                          : const SizedBox(
+                              width: 40,
+                              height: 40,
+                              child: Padding(
+                                padding: EdgeInsets.all(8.0),
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ),
                       title: Text(app.name ?? app.packageName),
                       subtitle: Text(app.packageName),
                       onTap: () => widget.onAppSelected(app.packageName),

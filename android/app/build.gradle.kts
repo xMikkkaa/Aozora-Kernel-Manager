@@ -7,6 +7,13 @@ val keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(FileInputStream(localPropertiesFile))
+    }
+val flutterVersionCode = localProperties.getProperty("flutter.versionCode")?.toIntOrNull() ?: 1
+val flutterVersionName = localProperties.getProperty("flutter.versionName") ?: "1.0.0"
 
 plugins {
     id("com.android.application")
@@ -20,8 +27,7 @@ plugins {
 android {
     namespace = "com.xaozora.manager"
     compileSdk = flutter.compileSdkVersion
-    ndkPath = "/home/mik/xMik-Project/android-ndk-r26b/"
-    ndkVersion = "26.1.10909125" // <--- Masukin versi eksak dari r26b lu
+    ndkVersion = "27.0.12077973"
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -29,6 +35,21 @@ android {
 
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_17.toString()
+    }
+    packaging {
+        resources {
+            excludes += "DebugProbesKt.bin"
+            
+            excludes += "META-INF/DEPENDENCIES"
+            excludes += "META-INF/LICENSE"
+            excludes += "META-INF/LICENSE.txt"
+            excludes += "META-INF/license.txt"
+            excludes += "META-INF/NOTICE"
+            excludes += "META-INF/NOTICE.txt"
+            excludes += "META-INF/notice.txt"
+            excludes += "META-INF/ASL2.0"
+            excludes += "META-INF/*.kotlin_module" 
+        }
     }
 
     defaultConfig {
@@ -50,11 +71,10 @@ android {
         }
     }
 
+
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
-            
-            // Di KTS, boolean harus pakai tanda "="
             isMinifyEnabled = true
             isShrinkResources = true
             
