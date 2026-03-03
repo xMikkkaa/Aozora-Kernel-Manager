@@ -273,13 +273,16 @@ class MainActivity : FlutterActivity() {
             var line: String?
             while (reader.readLine().also { line = it } != null) {
                 val parts = line!!.split("\\s+".toRegex())
-                if (parts.size < 2) continue
-                val key = parts[0].replace(":", "")
-                val value = parts[1].toLong() 
-                
-                if (key == "MemTotal") total = value / 1024 // to MB
-                if (key == "MemAvailable") available = value / 1024 // to MB
-                
+                if (parts.size >= 2) {
+                    val key = parts[0]
+                    val value = parts[1].toLongOrNull() ?: 0L
+                    
+                    if (key == "MemTotal:") {
+                        total = value / 1024 // Convert kB to MB
+                    } else if (key == "MemAvailable:") {
+                        available = value / 1024 // Convert kB to MB
+                    }
+                }
                 if (total > 0 && available > 0) break
             }
             reader.close()

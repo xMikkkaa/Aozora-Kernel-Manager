@@ -64,6 +64,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   // app manager reference
   final GlobalKey<AppManagerMenuState> _appManagerKey = GlobalKey();
 
+  final Map<int, GlobalKey> _navKeys = {
+    0: GlobalKey(), 1: GlobalKey(), 2: GlobalKey(),
+    3: GlobalKey(), 4: GlobalKey(),
+  };
+
   late PageController _pageController;
 
   @override
@@ -104,6 +109,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               _selectedIndex = index;
               _isBottomBarVisible = true;
             });
+            _scrollToActiveNav(index);
           }
         },
         children: [
@@ -115,9 +121,29 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         ],
       ),
       floatingActionButton: (_selectedIndex == 4 && _isAutdAvailable)
-          ? FloatingActionButton(
-              onPressed: () => _appManagerKey.currentState?.showAddAppSheet(),
-              child: const Icon(Icons.add),
+          ? ClipRRect(
+              borderRadius: BorderRadius.circular(18),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer.withOpacity(0.25),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: colorScheme.primary.withOpacity(0.4),
+                      width: 1,
+                    ),
+                  ),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: () => _appManagerKey.currentState?.showAddAppSheet(),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Icon(Icons.add, color: colorScheme.onPrimaryContainer),
+                    ),
+                  ),
+                ),
+              ),
             )
           : null,
       // floating nav bar
@@ -129,21 +155,32 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           child: ClipRRect(
             borderRadius: BorderRadius.circular(50),
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+              filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
               child: Container(
                 height: 70,
                 decoration: BoxDecoration(
-                  color: colorScheme.surfaceVariant.withOpacity(0.3),
                   borderRadius: BorderRadius.circular(50),
                   border: Border.all(
-                    color: colorScheme.outlineVariant.withOpacity(0.3),
-                    width: 0.5,
+                    color: Colors.white.withOpacity(0.15),
+                    width: 1.2,
+                  ),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.transparent,
+                      Colors.transparent,
+                      Colors.transparent,
+                    ],
+                    stops: const [0.0, 0.05, 0.95, 1.0],
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
+                      color: colorScheme.shadow.withOpacity(0.3),
+                      blurRadius: 30,
+                      spreadRadius: -5,
+                      offset: const Offset(0, 15),
                     ),
                   ],
                 ),
@@ -153,16 +190,16 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: [
-                      _buildNavItem(context, Icons.home_rounded, "Home", 0),
+                      _buildNavItem(context, _navKeys[0]!, Icons.home_rounded, "Home", 0),
                       const SizedBox(width: 8),
-                      _buildNavItem(context, Icons.tune_rounded, "Tuning", 1),
+                      _buildNavItem(context, _navKeys[1]!, Icons.tune_rounded, "Tuning", 1),
                       const SizedBox(width: 8),
-                      _buildNavItem(context, Icons.build_circle_outlined, "Tweaks", 2),
+                      _buildNavItem(context, _navKeys[2]!, Icons.build_circle_outlined, "Tweaks", 2),
                       const SizedBox(width: 8),
-                      _buildNavItem(context, Icons.extension_rounded, "Helper", 3),
+                      _buildNavItem(context, _navKeys[3]!, Icons.extension_rounded, "Helper", 3),
                       if (_isAutdAvailable) ...[
                         const SizedBox(width: 8),
-                        _buildNavItem(context, Icons.apps_rounded, "Apps", 4),
+                        _buildNavItem(context, _navKeys[4]!, Icons.apps_rounded, "Apps", 4),
                       ],
                     ],
                   ),
@@ -194,11 +231,27 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     );
   }
 
-  Widget _buildNavItem(BuildContext context, IconData icon, String label, int index) {
+  void _scrollToActiveNav(int index) {
+    if (index >= _getNavItemCount()) return;
+    final key = _navKeys[index];
+    if (key == null) return;
+    final context = key.currentContext;
+    if (context != null) {
+      Scrollable.ensureVisible(
+        context,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  Widget _buildNavItem(BuildContext context, GlobalKey key, IconData icon, String label, int index) {
     final isSelected = _selectedIndex == index;
     final colorScheme = Theme.of(context).colorScheme;
 
     return GestureDetector(
+      key: key,
       onTap: () async {
         if (_selectedIndex == index) return;
         setState(() {
@@ -208,6 +261,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         await _pageController.animateToPage(index, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
         if (mounted) {
           setState(() => _isNavigating = false);
+          _scrollToActiveNav(index);
         }
       },
       child: AnimatedContainer(
@@ -215,10 +269,21 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         padding: EdgeInsets.symmetric(horizontal: isSelected ? 20 : 16, vertical: 12),
         decoration: isSelected
             ? BoxDecoration(
-                color: colorScheme.primaryContainer,
+                color: colorScheme.primaryContainer.withOpacity(0.25),
                 borderRadius: BorderRadius.circular(30),
+                border: Border.all(
+                  color: colorScheme.primary.withOpacity(0.4),
+                  width: 1,
+                ),
               )
-            : null,
+            : BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(
+                  color: Colors.transparent,
+                  width: 1,
+                ),
+              ),
         child: Row(
           children: [
             Icon(
@@ -240,4 +305,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       ),
     );
   }
+
+  int _getNavItemCount() => _isAutdAvailable ? 5 : 4;
 }

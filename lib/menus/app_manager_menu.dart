@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -85,7 +86,7 @@ class AppManagerMenuState extends State<AppManagerMenu> {
       await platform.invokeMethod('executeScript', {'script': cmd});
       _fetchConfiguredApps();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to add app')));
+      _showGlassSnackBar('Failed to add app', isError: true);
     }
   }
 
@@ -96,7 +97,7 @@ class AppManagerMenuState extends State<AppManagerMenu> {
       await platform.invokeMethod('executeScript', {'script': cmd});
       _fetchConfiguredApps();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update app')));
+      _showGlassSnackBar('Failed to update app', isError: true);
     }
   }
 
@@ -106,8 +107,44 @@ class AppManagerMenuState extends State<AppManagerMenu> {
       await platform.invokeMethod('executeScript', {'script': cmd});
       _fetchConfiguredApps();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to remove app')));
+      _showGlassSnackBar('Failed to remove app', isError: true);
     }
+  }
+
+  void _showGlassSnackBar(String message, {bool isError = false}) {
+    final colorScheme = Theme.of(context).colorScheme;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        behavior: SnackBarBehavior.floating,
+        content: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: (isError ? colorScheme.errorContainer : colorScheme.primaryContainer).withOpacity(0.3),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: (isError ? colorScheme.error : colorScheme.primary).withOpacity(0.5),
+                  width: 1,
+                ),
+              ),
+              child: Text(
+                message,
+                style: TextStyle(
+                  color: isError ? colorScheme.onErrorContainer : colorScheme.onPrimaryContainer,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   // show add app sheet
@@ -116,22 +153,47 @@ class AppManagerMenuState extends State<AppManagerMenu> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.8,
-          minChildSize: 0.5,
-          maxChildSize: 0.95,
-          expand: false,
-          builder: (context, scrollController) {
-            return _AddAppSheetContent(
-              scrollController: scrollController,
-              existingApps: _configuredApps.map((e) => e.app.packageName).toList(),
-              onAppSelected: (packageName) {
-                Navigator.pop(context);
-                _addAppToConfig(packageName);
-              },
-            );
-          },
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.22),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+                border: const Border(top: BorderSide(color: Colors.white24, width: 1.2)),
+                gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.white.withOpacity(0.25),
+                      Colors.transparent,
+                      Colors.transparent,
+                      Colors.black.withOpacity(0.2)
+                    ],
+                    stops: const [0.0, 0.05, 0.95, 1.0]),
+              ),
+              child: DraggableScrollableSheet(
+                initialChildSize: 0.8,
+                minChildSize: 0.5,
+                maxChildSize: 0.95,
+                expand: false,
+                builder: (context, scrollController) {
+                  return _AddAppSheetContent(
+                    scrollController: scrollController,
+                    existingApps: _configuredApps.map((e) => e.app.packageName).toList(),
+                    onAppSelected: (packageName) {
+                      Navigator.pop(context);
+                      _addAppToConfig(packageName);
+                    },
+                  );
+                },
+              ),
+            ),
+          ),
         );
       },
     );
@@ -141,65 +203,90 @@ class AppManagerMenuState extends State<AppManagerMenu> {
   void _showEditAppSheet(ConfiguredApp config) {
     showModalBottomSheet(
       context: context,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  config.app.icon != null
-                      ? Image.memory(config.app.icon!, width: 48, height: 48)
-                      : const Icon(Icons.android, size: 48),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.22),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+                border: const Border(top: BorderSide(color: Colors.white24, width: 1.2)),
+                gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.white.withOpacity(0.25),
+                      Colors.transparent,
+                      Colors.transparent,
+                      Colors.black.withOpacity(0.2)
+                    ],
+                    stops: const [0.0, 0.05, 0.95, 1.0]),
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
                       children: [
-                        Text(config.app.name ?? config.app.packageName, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                        Text(config.app.packageName, style: Theme.of(context).textTheme.bodySmall),
+                        config.app.icon != null
+                            ? Image.memory(config.app.icon!, width: 48, height: 48)
+                            : const Icon(Icons.android, size: 48),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(config.app.name ?? config.app.packageName, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                              Text(config.app.packageName, style: Theme.of(context).textTheme.bodySmall),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              const Text("Select Mode", style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'p', label: Text('Perf'), icon: Icon(Icons.rocket_launch)),
-                  ButtonSegment(value: 'g', label: Text('Game'), icon: Icon(Icons.sports_esports)),
-                  ButtonSegment(value: 'g2', label: Text('Game+'), icon: Icon(Icons.videogame_asset)),
-                ],
-                selected: {config.mode},
-                onSelectionChanged: (Set<String> newSelection) {
-                  Navigator.pop(context);
-                  _updateAppConfig(config.app.packageName, newSelection.first);
-                },
-                style: const ButtonStyle(
-                  visualDensity: VisualDensity.compact,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    const SizedBox(height: 24),
+                    const Text("Select Mode", style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: 'p', label: Text('Perf'), icon: Icon(Icons.rocket_launch)),
+                        ButtonSegment(value: 'g', label: Text('Game'), icon: Icon(Icons.sports_esports)),
+                        ButtonSegment(value: 'g2', label: Text('Game+'), icon: Icon(Icons.videogame_asset)),
+                      ],
+                      selected: {config.mode},
+                      onSelectionChanged: (Set<String> newSelection) {
+                        Navigator.pop(context);
+                        _updateAppConfig(config.app.packageName, newSelection.first);
+                      },
+                      style: const ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _removeAppFromConfig(config.app.packageName);
+                        },
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text("Remove from list"),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Theme.of(context).colorScheme.error,
+                          side: BorderSide(color: Theme.of(context).colorScheme.error),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _removeAppFromConfig(config.app.packageName);
-                  },
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text("Remove from list"),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Theme.of(context).colorScheme.error,
-                    side: BorderSide(color: Theme.of(context).colorScheme.error),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         );
       },

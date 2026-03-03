@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -89,28 +90,67 @@ class _TuningMenuState extends State<TuningMenu> {
   Future<void> _executeProfile(String id) async {
     setState(() => _processingProfile = id);
     try {
-      if (_isAutdAvailable && id != 'cachecleaner') {
-        String cmd = 'echo "$id" > /data/data/com.xaozora.manager/files/autd_base_mode; echo "$id" > /data/data/com.xaozora.manager/files/autd_status';
-        await platform.invokeMethod('executeScript', {'script': cmd});
-        setState(() => _activeProfileId = id);
+      if (id == 'cachecleaner') {
+        await platform.invokeMethod('executeScript', {'script': '/system/bin/cachecleaner'});
       } else {
-        await platform.invokeMethod('executeScript', {'script': '/system/bin/$id'});
+        if (_isAutdAvailable) {
+          String cmd =
+              'echo "$id" > /data/data/com.xaozora.manager/files/autd_base_mode; echo "$id" > /data/data/com.xaozora.manager/files/autd_status';
+          await platform.invokeMethod('executeScript', {'script': cmd});
+          setState(() => _activeProfileId = id);
+        } else {
+          await platform.invokeMethod(
+              'executeScript', {'script': '/system/bin/$id'});
+        }
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Profile $id applied successfully')),
-      );
+      if (id == 'cachecleaner') {
+        _showGlassSnackBar('Cache cleaned successfully!');
+      } else {
+        _showGlassSnackBar('Profile $id applied successfully');
+      }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to apply $id: $e'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      _showGlassSnackBar('Failed to apply $id: $e', isError: true);
     } finally {
       if (mounted) setState(() => _processingProfile = null);
     }
+  }
+
+  void _showGlassSnackBar(String message, {bool isError = false}) {
+    final colorScheme = Theme.of(context).colorScheme;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        behavior: SnackBarBehavior.floating,
+        content: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: (isError ? colorScheme.errorContainer : colorScheme.primaryContainer).withOpacity(0.3),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: (isError ? colorScheme.error : colorScheme.primary).withOpacity(0.5),
+                  width: 1,
+                ),
+              ),
+              child: Text(
+                message,
+                style: TextStyle(
+                  color: isError ? colorScheme.onErrorContainer : colorScheme.onPrimaryContainer,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override

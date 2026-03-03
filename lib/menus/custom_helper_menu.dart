@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:async';
+import 'dart:ui';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
@@ -108,9 +109,7 @@ class _CustomHelperMenuState extends State<CustomHelperMenu> {
           _statusText = 'AUTD binary verified and ready.';
         });
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('AUTD binary is up to date')),
-          );
+          _showGlassSnackBar('AUTD binary is up to date');
         }
         return;
       }
@@ -126,11 +125,45 @@ class _CustomHelperMenuState extends State<CustomHelperMenu> {
         _statusText = 'Failed to verify/download AUTD: $e';
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Theme.of(context).colorScheme.error),
-        );
+        _showGlassSnackBar('Error: $e', isError: true);
       }
     }
+  }
+
+  void _showGlassSnackBar(String message, {bool isError = false}) {
+    final colorScheme = Theme.of(context).colorScheme;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        behavior: SnackBarBehavior.floating,
+        content: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: (isError ? colorScheme.errorContainer : colorScheme.primaryContainer).withOpacity(0.3),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: (isError ? colorScheme.error : colorScheme.primary).withOpacity(0.5),
+                  width: 1,
+                ),
+              ),
+              child: Text(
+                message,
+                style: TextStyle(
+                  color: isError ? colorScheme.onErrorContainer : colorScheme.onPrimaryContainer,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _showDownloadDialog(String url, String savePath, String expectedSha) async {
@@ -237,12 +270,7 @@ class _CustomHelperMenuState extends State<CustomHelperMenu> {
         _statusText = 'Download failed: $errorMessage';
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $errorMessage'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        _showGlassSnackBar('Error: $errorMessage', isError: true);
       }
     }
   }

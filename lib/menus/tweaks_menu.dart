@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -62,40 +63,122 @@ class _TweaksMenuState extends State<TweaksMenu> {
     }
   }
 
-  Future<void> _flushRam() async {
+ Future<void> _flushRam() async {
     try {
-      const cmd = "for P in \$(pidof com.xaozora.manager); do echo -1000 > /proc/\$P/oom_score_adj; done; am kill-all; sync; echo 3 > /proc/sys/vm/drop_caches; [ -f /proc/sys/vm/compact_memory ] && echo 1 > /proc/sys/vm/compact_memory; fstrim -v /data";
+      const cmd = r'''
+        for P in $(pidof com.xaozora.manager); do 
+            echo -1000 > /proc/$P/oom_score_adj 2>/dev/null; 
+        done;
+
+        for p in /proc/[0-9]*; do
+            read oom < "$p/oom_score_adj" 2>/dev/null
+            [ "${oom:-0}" -ge 500 ] && echo "${p##*/}"
+        done | xargs -r kill -9 2>/dev/null;
+
+        sync; 
+        echo 3 > /proc/sys/vm/drop_caches;
+        [ -f /proc/sys/vm/compact_memory ] && echo 1 > /proc/sys/vm/compact_memory;
+
+        (
+          pm list packages -3 | cut -d':' -f2 | grep -v "com.xaozora.manager" | while read -r app; do
+              am force-stop "$app"
+          done;
+          fstrim -v /data;
+        ) &
+      ''';
       await platform.invokeMethod('executeScript', {'script': cmd});
+      
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('RAM Flushed & Storage Trimmed')),
-      );
-      Future.delayed(const Duration(seconds: 1), _fetchRamStats);
+      _showGlassSnackBar('FLush Ram & Cache Cleared Successfully!');
+      Future.delayed(const Duration(milliseconds: 1500), _fetchRamStats);
+      
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to flush RAM')),
-      );
+      _showGlassSnackBar('Failed to flush RAM', isError: true);
     }
   }
 
   Future<void> _confirmFlushRam() async {
+    final colorScheme = Theme.of(context).colorScheme;
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Flush RAM?'),
-          content: const Text('This will clear system cache and trim storage.'),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainer.withOpacity(0.25),
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.2),
+                    width: 1,
+                  ),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.white.withOpacity(0.1),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Flush RAM?',
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.onSurface,
+                          ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'This will clear system cache and trim storage.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(false),
+                          child: const Text('Cancel'),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: () => Navigator.of(context).pop(true),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: colorScheme.primaryContainer.withOpacity(0.25),
+                            foregroundColor: colorScheme.onPrimaryContainer,
+                            elevation: 0,
+                            shadowColor: Colors.transparent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                              side: BorderSide(
+                                color: colorScheme.primary.withOpacity(0.4),
+                                width: 1,
+                              ),
+                            ),
+                          ),
+                          child: const Text('Flush'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Flush'),
-            ),
-          ],
+          ),
         );
       },
     );
@@ -126,8 +209,44 @@ class _TweaksMenuState extends State<TweaksMenu> {
         setState(() => onUpdate(value));
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to apply setting')));
+      _showGlassSnackBar('Failed to apply setting', isError: true);
     }
+  }
+
+  void _showGlassSnackBar(String message, {bool isError = false}) {
+    final colorScheme = Theme.of(context).colorScheme;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        behavior: SnackBarBehavior.floating,
+        content: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: (isError ? colorScheme.errorContainer : colorScheme.primaryContainer).withOpacity(0.3),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: (isError ? colorScheme.error : colorScheme.primary).withOpacity(0.5),
+                  width: 1,
+                ),
+              ),
+              child: Text(
+                message,
+                style: TextStyle(
+                  color: isError ? colorScheme.onErrorContainer : colorScheme.onPrimaryContainer,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
