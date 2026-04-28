@@ -39,7 +39,22 @@ class MainActivity : FlutterActivity() {
         updatePowerSaveState()
     }
 
+    private fun forceUnrestrictedMode() {
+    Thread {
+        try {
+            Runtime.getRuntime().exec(arrayOf("su", "-c", "dumpsys deviceidle whitelist +com.xaozora.manager")).waitFor()
+            
+            Runtime.getRuntime().exec(arrayOf("su", "-c", "cmd appops set com.xaozora.manager RUN_ANY_IN_BACKGROUND allow")).waitFor()
+            Runtime.getRuntime().exec(arrayOf("su", "-c", "cmd appops set com.xaozora.manager RUN_IN_BACKGROUND allow")).waitFor()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }.start()
+}
+
     private fun updatePowerSaveState() {
+        if (!File("/system/bin/autd").exists()) return
+        
         try {
             val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
             val file = File(filesDir, "autd_ps_state")
@@ -55,6 +70,9 @@ class MainActivity : FlutterActivity() {
                 "checkRoot" -> {
                     Thread {
                         val isRooted = checkRoot()
+                        if (isRooted) {
+                            forceUnrestrictedMode()
+                        }
                         runOnUiThread { result.success(isRooted) }
                     }.start()
                 }

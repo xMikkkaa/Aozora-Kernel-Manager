@@ -181,122 +181,127 @@ class _CustomHelperMenuState extends State<CustomHelperMenu> {
       context: context,
       barrierDismissible: false,
       barrierColor: Colors.transparent,
-      builder: (context) {
+      builder: (dialogContext) {
         double progress = 0.0;
+        bool isDownloading = false;
+
         return StatefulBuilder(
-          builder: (context, setDialogState) {
-            // start download
-            _dio.get(
-              url,
-              options: Options(responseType: ResponseType.bytes),
-              onReceiveProgress: (received, total) {
-                if (total != -1) {
-                  setDialogState(() {
-                    progress = received / total;
-                  });
-                }
-              },
-            ).then((response) async {
-              try {
-                print('Download completed, received ${response.data.length} bytes');
-                
-                // write to file
-                final file = File(savePath);
-                print('Writing to file: $savePath');
-                await file.writeAsBytes(response.data);
-                
-                // verify file was written
-                final fileSize = await file.length();
-                print('File written, size: $fileSize bytes');
-                
-                if (fileSize == 0) {
-                  throw Exception('File write failed - file is empty');
-                }
+          builder: (innerContext, setDialogState) {
+            if (!isDownloading) {
+              isDownloading = true;
+              // start download
+              _dio.get(
+                url,
+                options: Options(responseType: ResponseType.bytes),
+                onReceiveProgress: (received, total) {
+                  if (total != -1) {
+                    setDialogState(() {
+                      progress = received / total;
+                    });
+                  }
+                },
+              ).then((response) async {
+                try {
+                  print('Download completed, received ${response.data.length} bytes');
+                  
+                  // write to file
+                  final file = File(savePath);
+                  print('Writing to file: $savePath');
+                  await file.writeAsBytes(response.data);
+                  
+                  // verify file was written
+                  final fileSize = await file.length();
+                  print('File written, size: $fileSize bytes');
+                  
+                  if (fileSize == 0) {
+                    throw Exception('File write failed - file is empty');
+                  }
 
-                // verify hash
-                final downloaded = response.data as List<int>;
-                final localSha = sha256.convert(downloaded).toString();
-                print('Downloaded SHA256: $localSha');
-                print('Expected SHA256: $expectedSha');
-                
-                if (localSha != expectedSha) {
-                  throw Exception('Hash mismatch: $localSha != $expectedSha');
+                  // verify hash
+                  final downloaded = response.data as List<int>;
+                  final localSha = sha256.convert(downloaded).toString();
+                  print('Downloaded SHA256: $localSha');
+                  print('Expected SHA256: $expectedSha');
+                  
+                  if (localSha != expectedSha) {
+                    throw Exception('Hash mismatch: $localSha != $expectedSha');
+                  }
+
+                  // save sha file
+                  final dir = await getApplicationSupportDirectory();
+                  await File('${dir.path}/autd.sha256').writeAsString(expectedSha);
+                  
+                  await platform.invokeMethod('writeSystemFile', {'path': '/data/data/com.xaozora.manager/files/autd_version', 'value': autdTag});
+                  print('SHA256 file saved');
+
+                  downloadSuccess = true;
+                } catch (e) {
+                  print('Error during download processing: $e');
+                  errorMessage = e.toString();
+                  downloadSuccess = false;
                 }
-
-                // save sha file
-                final dir = await getApplicationSupportDirectory();
-                await File('${dir.path}/autd.sha256').writeAsString(expectedSha);
                 
-                await platform.invokeMethod('writeSystemFile', {'path': '/data/data/com.xaozora.manager/files/autd_version', 'value': autdTag});
-                print('SHA256 file saved');
-
-                downloadSuccess = true;
-              } catch (e) {
-                print('Error during download processing: $e');
+                if (dialogContext.mounted) {
+                  Navigator.pop(dialogContext);
+                }
+              }).catchError((e) {
+                print('Download error: $e');
                 errorMessage = e.toString();
                 downloadSuccess = false;
-              }
-              
-              if (mounted) {
-                Navigator.pop(context);
-              }
-            }).catchError((e) {
-              print('Download error: $e');
-              errorMessage = e.toString();
-              downloadSuccess = false;
-              if (mounted) {
-                Navigator.pop(context);
-              }
-            });
+                if (dialogContext.mounted) {
+                  Navigator.pop(dialogContext);
+                }
+              });
+            }
 
             return Dialog(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(28),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
-                  child: Container(
-                    padding: const EdgeInsets.all(28),
-                    decoration: BoxDecoration(
-                      color: colorScheme.surfaceContainer.withOpacity(0.25),
-                      borderRadius: BorderRadius.circular(28),
-                      border: Border.all(
-                        color: colorScheme.outlineVariant.withOpacity(0.5),
-                        width: 1.2,
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(28),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+                child: Container(
+                  padding: const EdgeInsets.all(28),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainer.withOpacity(0.25),
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(
+                      color: colorScheme.outlineVariant.withOpacity(0.5),
+                      width: 1.2,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.cloud_download_outlined, size: 48, color: colorScheme.primary),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Downloading AUTD',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                       ),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.cloud_download_outlined, size: 48, color: colorScheme.primary),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Downloading AUTD',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Fetching latest binary from GitHub...',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
-                        ),
-                        const SizedBox(height: 24),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: LinearProgressIndicator(value: progress, minHeight: 8),
-                        ),
-                        const SizedBox(height: 12),
-                        Text('${(progress * 100).toStringAsFixed(1)}%', style: TextStyle(fontWeight: FontWeight.bold, color: colorScheme.primary)),
-                      ],
-                    ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Fetching latest binary from GitHub...',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 24),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: LinearProgressIndicator(value: progress, minHeight: 8),
+                      ),
+                      const SizedBox(height: 12),
+                      Text('${(progress * 100).toStringAsFixed(1)}%', style: TextStyle(fontWeight: FontWeight.bold, color: colorScheme.primary)),
+                    ],
                   ),
                 ),
               ),
-            );
-          },
-        );
-      },
+            ),
+          );
+        },
+      );
+    },
     );
 
     // handle result
@@ -427,6 +432,14 @@ class _CustomHelperMenuState extends State<CustomHelperMenu> {
 
       // Cleanup app cache file
       if (await tempFile.exists()) await tempFile.delete();
+      
+      // Cleanup original picked file from file_picker cache
+      if (_selectedZip != null && await _selectedZip!.exists()) {
+        await _selectedZip!.delete();
+      }
+      await FilePicker.platform.clearTemporaryFiles();
+      
+      setState(() => _selectedZip = null);
 
     } catch (e) {
       setState(() {

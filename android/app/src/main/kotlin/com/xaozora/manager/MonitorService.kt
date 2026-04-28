@@ -8,8 +8,12 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.database.ContentObserver
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.provider.Settings
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,6 +30,8 @@ class MonitorService : Service() {
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    
+    private var powerObserver: ContentObserver? = null
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -38,10 +44,6 @@ class MonitorService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        if (!File(DAEMON_PATH).exists()) {
-            stopSelf()
-            return
-        }
 
         isServiceRunning = true
         startForeground(1, createNotification())
@@ -52,19 +54,25 @@ class MonitorService : Service() {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(screenReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(screenReceiver, filter, Context.RECEIVER_EXPORTED)
         } else {
             registerReceiver(screenReceiver, filter)
         }
 
+        val uri = Settings.Global.getUriFor("low_power")
+        powerObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                super.onChange(selfChange)
+                updatePowerSaveState()
+            }
+        }
+        contentResolver.registerContentObserver(uri, false, powerObserver!!)
+
         checkAndStartDaemon()
+        updatePowerSaveState()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (!File(DAEMON_PATH).exists()) {
-            stopSelf()
-            return START_NOT_STICKY
-        }
         startForeground(1, createNotification())
         return START_STICKY
     }
@@ -74,7 +82,10 @@ class MonitorService : Service() {
         isServiceRunning = false
         try {
             unregisterReceiver(screenReceiver)
-        } catch (e: Exception) {
+        } catch (e: Exception) {}
+        
+        powerObserver?.let {
+            contentResolver.unregisterContentObserver(it)
         }
         serviceScope.cancel()
     }
@@ -83,10 +94,19 @@ class MonitorService : Service() {
         return null
     }
 
+    private fun updatePowerSaveState() {
+        try {
+            val isPowerSave = Settings.Global.getInt(contentResolver, "low_power", 0) == 1
+            val file = File(filesDir, "autd_ps_state")
+            file.writeText(if (isPowerSave) "1" else "0")
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     private fun checkAndStartDaemon() {
         serviceScope.launch {
             if (isDaemonRunning()) return@launch
-
             try {
                 val f = File(DAEMON_PATH)
                 if (!f.exists()) return@launch
