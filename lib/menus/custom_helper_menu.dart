@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:ui';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
 import 'package:crypto/crypto.dart';
 import 'package:archive/archive_io.dart';
@@ -17,6 +18,8 @@ class CustomHelperMenu extends StatefulWidget {
 }
 
 class _CustomHelperMenuState extends State<CustomHelperMenu> {
+  static const platform = MethodChannel('com.xaozora.manager/daemon');
+  
   File? _selectedZip;
   bool _useAutd = false;
   bool _isAutdReady = false;
@@ -84,6 +87,8 @@ class _CustomHelperMenuState extends State<CustomHelperMenu> {
       final autdAsset = assets.firstWhere((a) => a['name'] == 'autd', orElse: () => null);
       final shaAsset = assets.firstWhere((a) => a['name'] == 'autd.sha256', orElse: () => null);
 
+      final autdTag = response.data['tag_name'].toString().replaceAll('v', '');
+
       if (autdAsset == null || shaAsset == null) {
         throw Exception('Release assets not found on GitHub');
       }
@@ -108,6 +113,7 @@ class _CustomHelperMenuState extends State<CustomHelperMenu> {
           _isAutdReady = true;
           _statusText = 'AUTD binary verified and ready.';
         });
+        await platform.invokeMethod('writeSystemFile', {'path': '/data/data/com.xaozora.manager/files/autd_version', 'value': autdTag});
         if (mounted) {
           _showGlassSnackBar('AUTD binary is up to date');
         }
@@ -116,7 +122,7 @@ class _CustomHelperMenuState extends State<CustomHelperMenu> {
 
       // download if needed
       if (mounted) {
-        await _showDownloadDialog(autdAsset['browser_download_url'], autdFile.path, remoteSha);
+        await _showDownloadDialog(autdAsset['browser_download_url'], autdFile.path, remoteSha, autdTag);
       }
 
     } catch (e) {
@@ -166,7 +172,7 @@ class _CustomHelperMenuState extends State<CustomHelperMenu> {
     );
   }
 
-  Future<void> _showDownloadDialog(String url, String savePath, String expectedSha) async {
+  Future<void> _showDownloadDialog(String url, String savePath, String expectedSha, String autdTag) async {
     final colorScheme = Theme.of(context).colorScheme;
     bool downloadSuccess = false;
     String errorMessage = '';
@@ -220,6 +226,8 @@ class _CustomHelperMenuState extends State<CustomHelperMenu> {
                 // save sha file
                 final dir = await getApplicationSupportDirectory();
                 await File('${dir.path}/autd.sha256').writeAsString(expectedSha);
+                
+                await platform.invokeMethod('writeSystemFile', {'path': '/data/data/com.xaozora.manager/files/autd_version', 'value': autdTag});
                 print('SHA256 file saved');
 
                 downloadSuccess = true;

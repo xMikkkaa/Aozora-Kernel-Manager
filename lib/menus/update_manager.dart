@@ -16,6 +16,7 @@ class UpdateManager {
       String? latestAppUrl;
       String? latestAutdUrl;
       String newAppVersion = "";
+      String newAutdVersion = "";
 
       // 1. Cek App Update
       final packageInfo = await PackageInfo.fromPlatform();
@@ -42,15 +43,19 @@ class UpdateManager {
           final autdAsset = assets.firstWhere((a) => a['name'] == 'autd', orElse: () => null);
 
           if (shaAsset != null && autdAsset != null) {
+            newAutdVersion = autdResp.data['tag_name'].toString().replaceAll('v', '');
             final shaResp = await _dio.get(shaAsset['browser_download_url']);
             final expectedSha = shaResp.data.toString().trim().split(' ').first;
 
-            final localShaStr = await platform.invokeMethod('executeScript', {'script': 'sha256sum /system/bin/autd | awk \'{print \$1}\''});
+            await platform.invokeMethod('executeScript', {'script': 'sha256sum /system/bin/autd | awk \'{print \$1}\' > /data/local/tmp/autd_sha'});
+            final localShaStr = await platform.invokeMethod('readSystemFile', {'path': '/data/local/tmp/autd_sha'});
             final localSha = localShaStr?.toString().trim() ?? '';
 
             if (localSha != expectedSha && localSha.isNotEmpty) {
               autdNeedsUpdate = true;
               latestAutdUrl = autdAsset['browser_download_url'];
+            } else if (localSha == expectedSha && localSha.isNotEmpty) {
+              await platform.invokeMethod('writeSystemFile', {'path': '/data/data/com.xaozora.manager/files/autd_version', 'value': newAutdVersion});
             }
           }
         } catch (e) { /* Abaikan */ }
@@ -59,7 +64,7 @@ class UpdateManager {
       // 3. Tampilkan Modal jika ada update
       if ((appNeedsUpdate && latestAppUrl != null) || (autdNeedsUpdate && latestAutdUrl != null)) {
         if (context.mounted) {
-          _showUpdateModal(context, appNeedsUpdate, autdNeedsUpdate, latestAppUrl, latestAutdUrl, newAppVersion);
+          _showUpdateModal(context, appNeedsUpdate, autdNeedsUpdate, latestAppUrl, latestAutdUrl, newAppVersion, newAutdVersion);
         }
       }
     } catch (e) {
@@ -79,7 +84,7 @@ class UpdateManager {
     return false;
   }
 
-  static void _showUpdateModal(BuildContext context, bool updateApp, bool updateAutd, String? appUrl, String? autdUrl, String newAppVer) {
+  static void _showUpdateModal(BuildContext context, bool updateApp, bool updateAutd, String? appUrl, String? autdUrl, String newAppVer, String newAutdVer) {
     final colorScheme = Theme.of(context).colorScheme;
     bool isDownloading = false;
 
@@ -114,7 +119,7 @@ class UpdateManager {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          '${updateApp ? "• App Version v$newAppVer\n" : ""}${updateAutd ? "• AUTD Daemon" : ""}',
+                          '${updateApp ? "• App Version v$newAppVer\n" : ""}${updateAutd ? "• AUTD Daemon v$newAutdVer" : ""}',
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
                         ),
@@ -137,7 +142,7 @@ class UpdateManager {
                                   FilledButton(
                                     onPressed: () async {
                                       setState(() => isDownloading = true);
-                                      await _performUpdate(updateApp, updateAutd, appUrl, autdUrl);
+                                      await _performUpdate(updateApp, updateAutd, appUrl, autdUrl, newAutdVer);
                                       if (context.mounted) Navigator.of(context).pop();
                                     },
                                     style: FilledButton.styleFrom(
@@ -159,7 +164,7 @@ class UpdateManager {
     );
   }
 
-  static Future<void> _performUpdate(bool updateApp, bool updateAutd, String? appUrl, String? autdUrl) async {
+  static Future<void> _performUpdate(bool updateApp, bool updateAutd, String? appUrl, String? autdUrl, String newAutdVer) async {
     try {
       if (updateAutd && autdUrl != null) {
         // Download AUTD & Replace in Module
@@ -180,6 +185,7 @@ class UpdateManager {
           rm "$autdTempPath"
         ''';
         await platform.invokeMethod('executeScript', {'script': shellScript});
+        await platform.invokeMethod('writeSystemFile', {'path': '/data/data/com.xaozora.manager/files/autd_version', 'value': newAutdVer});
       }
 
       if (updateApp && appUrl != null) {

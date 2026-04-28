@@ -30,8 +30,8 @@ class _AboutMenuState extends State<AboutMenu> {
     
     String autdVer = "";
     if (autdExists) {
-      final sha = await platform.invokeMethod('executeScript', {'script': 'sha256sum /system/bin/autd | head -c 7'});
-      autdVer = (sha != null && sha.toString().trim().isNotEmpty) ? sha.toString().trim() : "Unknown";
+      final savedTag = await platform.invokeMethod('readSystemFile', {'path': '/data/data/com.xaozora.manager/files/autd_version'});
+      autdVer = (savedTag != null && savedTag.toString().trim().isNotEmpty) ? savedTag.toString().trim() : "Unknown";
     }
     
     if (mounted) {
@@ -50,7 +50,6 @@ class _AboutMenuState extends State<AboutMenu> {
         throw Exception('Could not launch url');
       }
     } catch (e) {
-      // Fallback copy to clipboard jika device tidak memiliki browser default
       await Clipboard.setData(const ClipboardData(text: 'https://github.com/xMikkkaa'));
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -278,7 +277,7 @@ class _AboutMenuState extends State<AboutMenu> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    "AUTD: $_autdVersionStr",
+                  "AUTD Version : $_autdVersionStr",
                     style: TextStyle(color: colorScheme.primary, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
                   ),
                 ),
