@@ -154,6 +154,7 @@ class AppManagerMenuState extends State<AppManagerMenu> {
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
+      barrierColor: Colors.transparent,
       elevation: 0,
       builder: (context) {
         return ClipRRect(
@@ -164,7 +165,7 @@ class AppManagerMenuState extends State<AppManagerMenu> {
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.22),
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-                border: const Border(top: BorderSide(color: Colors.white24, width: 1.2)),
+                border: Border(top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant, width: 1.2)),
                 gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
@@ -204,6 +205,7 @@ class AppManagerMenuState extends State<AppManagerMenu> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      barrierColor: Colors.transparent,
       elevation: 0,
       builder: (context) {
         return ClipRRect(
@@ -214,7 +216,7 @@ class AppManagerMenuState extends State<AppManagerMenu> {
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.22),
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-                border: const Border(top: BorderSide(color: Colors.white24, width: 1.2)),
+                border: Border(top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant, width: 1.2)),
                 gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,

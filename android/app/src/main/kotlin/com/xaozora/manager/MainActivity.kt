@@ -21,13 +21,30 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        filesDir  
+        filesDir
+        updatePowerSaveState()
     }
 
     override fun onResume() {
         super.onResume()
-        if (!MonitorService.isServiceRunning) {
-            startMonitorService()
+        if (File("/system/bin/autd").exists()) {
+            if (!MonitorService.isServiceRunning) {
+                startMonitorService()
+            }
+        } else {
+            if (MonitorService.isServiceRunning) {
+                stopMonitorService()
+            }
+        }
+        updatePowerSaveState()
+    }
+
+    private fun updatePowerSaveState() {
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            val file = File(filesDir, "autd_ps_state")
+            file.writeText(if (pm.isPowerSaveMode) "1" else "0")
+        } catch (e: Exception) {
         }
     }
 
@@ -359,6 +376,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun startMonitorService() {
+        if (!File("/system/bin/autd").exists()) return
         val serviceIntent = Intent(this, MonitorService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(serviceIntent)

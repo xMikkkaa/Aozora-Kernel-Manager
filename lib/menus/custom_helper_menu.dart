@@ -167,12 +167,14 @@ class _CustomHelperMenuState extends State<CustomHelperMenu> {
   }
 
   Future<void> _showDownloadDialog(String url, String savePath, String expectedSha) async {
+    final colorScheme = Theme.of(context).colorScheme;
     bool downloadSuccess = false;
     String errorMessage = '';
 
     await showDialog(
       context: context,
       barrierDismissible: false,
+      barrierColor: Colors.transparent,
       builder: (context) {
         double progress = 0.0;
         return StatefulBuilder(
@@ -239,17 +241,49 @@ class _CustomHelperMenuState extends State<CustomHelperMenu> {
               }
             });
 
-            return AlertDialog(
-              title: const Text('Downloading AUTD'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Fetching latest binary from GitHub...'),
-                  const SizedBox(height: 16),
-                  LinearProgressIndicator(value: progress),
-                  const SizedBox(height: 8),
-                  Text('${(progress * 100).toStringAsFixed(1)}%'),
-                ],
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+                  child: Container(
+                    padding: const EdgeInsets.all(28),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainer.withOpacity(0.25),
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(
+                        color: colorScheme.outlineVariant.withOpacity(0.5),
+                        width: 1.2,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.cloud_download_outlined, size: 48, color: colorScheme.primary),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Downloading AUTD',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Fetching latest binary from GitHub...',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+                        ),
+                        const SizedBox(height: 24),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: LinearProgressIndicator(value: progress, minHeight: 8),
+                        ),
+                        const SizedBox(height: 12),
+                        Text('${(progress * 100).toStringAsFixed(1)}%', style: TextStyle(fontWeight: FontWeight.bold, color: colorScheme.primary)),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             );
           },
@@ -345,7 +379,7 @@ class _CustomHelperMenuState extends State<CustomHelperMenu> {
         chmod 755 /data/local/tmp/aozora_update.zip
         
         # clean old module
-        EXISTING=\$(grep -l 'id=aozora' /data/adb/modules/*/module.prop 2>/dev/null)
+        EXISTING=\$(grep -il 'id=.*aozora' /data/adb/modules/*/module.prop 2>/dev/null | head -n 1)
         if [ ! -z "\$EXISTING" ]; then
           MOD_DIR=\$(dirname "\$EXISTING")
           echo "Cleaning old module at \$MOD_DIR"

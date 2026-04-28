@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -200,7 +201,15 @@ class _HomeMenuState extends State<HomeMenu> with SingleTickerProviderStateMixin
                     padding: const EdgeInsets.all(28.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
+                        Text(
+                          "Running on",
+                          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                color: Colors.white.withOpacity(0.7),
+                                letterSpacing: 1.2,
+                              ),
+                        ),
                         Text(
                           _systemInfo['model'] ?? "Unknown Device",
                           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
@@ -244,214 +253,299 @@ class _HomeMenuState extends State<HomeMenu> with SingleTickerProviderStateMixin
 
             // daemon service card
             if (_isAutdAvailable) ...[
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: _isDaemonRunning
-                      ? colorScheme.primaryContainer.withOpacity(0.2)
-                      : colorScheme.errorContainer.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: _isDaemonRunning ? colorScheme.primary : colorScheme.error,
-                    width: 1,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: _isDaemonRunning ? 20.0 : 0.0, sigmaY: _isDaemonRunning ? 20.0 : 0.0),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    decoration: BoxDecoration(
+                      color: _isDaemonRunning
+                          ? colorScheme.primaryContainer.withOpacity(0.25)
+                          : colorScheme.surfaceContainer,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: _isDaemonRunning ? colorScheme.primary.withOpacity(0.4) : colorScheme.outlineVariant.withOpacity(0.5),
+                        width: 1.2,
+                      ),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(24),
+                        onTap: _isAutdAvailable ? () => _isDaemonRunning ? _stopDaemon() : _startDaemon() : null,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: _isDaemonRunning ? colorScheme.primary.withOpacity(0.2) : colorScheme.error.withOpacity(0.2),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  _isDaemonRunning ? Icons.memory : Icons.power_off,
+                                  color: _isDaemonRunning ? colorScheme.primary : colorScheme.error,
+                                  size: 24,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "Daemon Service",
+                                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            color: _isDaemonRunning ? colorScheme.onPrimaryContainer : colorScheme.onSurface,
+                                          ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _isDaemonRunning ? "Running (autd)" : "Stopped",
+                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                            color: _isDaemonRunning ? colorScheme.onPrimaryContainer.withOpacity(0.7) : colorScheme.onSurfaceVariant,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // Custom Glass Toggle Indicator
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                width: 52,
+                                height: 28,
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: _isDaemonRunning ? colorScheme.primary : colorScheme.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(30),
+                                  border: Border.all(
+                                    color: _isDaemonRunning ? colorScheme.primary : colorScheme.outlineVariant.withOpacity(0.5),
+                                  ),
+                                ),
+                                alignment: _isDaemonRunning ? Alignment.centerRight : Alignment.centerLeft,
+                                child: Container(
+                                  width: 20,
+                                  height: 20,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: _isDaemonRunning ? colorScheme.onPrimary : colorScheme.outline,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: _isDaemonRunning ? colorScheme.primary : colorScheme.error,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        _isDaemonRunning ? Icons.memory : Icons.power_off,
-                        color: _isDaemonRunning ? colorScheme.onPrimary : colorScheme.onError,
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Daemon Service",
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                          ),
-                          Text(
-                            _isDaemonRunning ? "Running (autd)" : "Stopped",
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Switch(
-                      value: _isDaemonRunning,
-                      onChanged: _isAutdAvailable ? (val) => val ? _startDaemon() : _stopDaemon() : null,
-                      activeColor: colorScheme.primary,
-                    ),
-                  ],
                 ),
               ),
               const SizedBox(height: 24),
             ],
 
-            // system details
-            Card(
-              elevation: 0,
-              color: colorScheme.surfaceContainer,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "System Details",
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                    const SizedBox(height: 8),
-                    GridView.count(
-                      padding: EdgeInsets.zero,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisCount: 2,
-                      childAspectRatio: 3.0,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                      children: [
-                        _buildDetailItem(context, "Android", _systemInfo['android']!),
-                        _buildDetailItem(context, "Codename", _systemInfo['device']!),
-                        _buildDetailItem(context, "SELinux", _systemInfo['selinux']!),
-                        _buildDetailItem(context, "SoC", _systemInfo['soc']!),
-                        _buildDetailItem(context, "RAM", _systemInfo['ram']!),
-                        _buildDetailItem(context, "Battery", _systemInfo['battery']!),
-                        _buildDetailItem(context, "Uptime", _systemInfo['uptime']!),
-                        _buildDetailItem(context, "Resolution", _systemInfo['resolution']!),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    Divider(
-                      thickness: 0.5,
-                      color: Theme.of(context).colorScheme.outlineVariant,
-                    ),
-                    const SizedBox(height: 16),
-                    if (_isAutdAvailable) ...[
-                      Text(
-                        "Daemon Method",
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                              fontWeight: FontWeight.bold,
-                            ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.sensors_rounded,
-                            size: 16,
-                            color: _daemonMethod == 'Daemon info unavailable' || _daemonMethod == 'Checking Daemon...'
-                                ? colorScheme.error
-                                : const Color(0xFF81C784),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            _daemonMethod,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  fontFamily: _daemonMethod == 'Daemon info unavailable' || _daemonMethod == 'Checking Daemon...'
-                                      ? null
-                                      : 'monospace',
-                                  color: _daemonMethod == 'Daemon info unavailable' || _daemonMethod == 'Checking Daemon...'
-                                      ? colorScheme.error
-                                      : colorScheme.primary,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Divider(
-                        thickness: 0.5,
-                        color: Theme.of(context).colorScheme.outlineVariant,
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    Text(
-                      "Root Access",
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                    const SizedBox(height: 8),
-                    SelectableText(
-                      "${_systemInfo['root_manager']} ${_systemInfo['root_version']}",
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontFamily: 'monospace',
-                            color: colorScheme.primary,
-                          ),
-                    ),
-                    const SizedBox(height: 12),
-                    Divider(
-                      thickness: 0.5,
-                      color: Theme.of(context).colorScheme.outlineVariant,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      "Kernel Information",
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                    const SizedBox(height: 8),
-                    SelectableText(
-                      _systemInfo['kernel'] ?? "-",
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontFamily: 'monospace',
-                            color: colorScheme.primary,
-                          ),
-                    ),
-                  ],
-                ),
+            Text(
+              "System Dashboard",
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
+            ),
+            const SizedBox(height: 16),
+
+            // Quick Stats Row
+            Row(
+              children: [
+                Expanded(child: _buildQuickStatCard(context, "Battery", _systemInfo['battery']!, Icons.battery_charging_full_rounded, const Color(0xFF4CAF50))),
+                const SizedBox(width: 12),
+                Expanded(child: _buildQuickStatCard(context, "RAM", _systemInfo['ram']!, Icons.memory_rounded, colorScheme.primary)),
+                const SizedBox(width: 12),
+                Expanded(child: _buildQuickStatCard(context, "Uptime", _systemInfo['uptime']!, Icons.timer_rounded, const Color(0xFFFF9800))),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Hardware Info Grid
+            GridView.count(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              childAspectRatio: 2.6,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              children: [
+                _buildInfoTile(context, "Android", _systemInfo['android']!, Icons.android_rounded, color: const Color(0xFF81C784)),
+                _buildInfoTile(context, "Codename", _systemInfo['device']!, Icons.smartphone_rounded),
+                _buildInfoTile(context, "SoC", _systemInfo['soc']!, Icons.developer_board_rounded),
+                _buildInfoTile(context, "Display", _systemInfo['resolution']!, Icons.screenshot_rounded),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Root & Security
+            Row(
+              children: [
+                Expanded(child: _buildInfoTile(context, "Root Access", "${_systemInfo['root_manager']} ${_systemInfo['root_version']}", Icons.admin_panel_settings_rounded, isMonospace: true)),
+                const SizedBox(width: 12),
+                Expanded(child: _buildInfoTile(context, "SELinux", _systemInfo['selinux']!, Icons.security_rounded, color: _systemInfo['selinux'] == 'Enforcing' ? const Color(0xFF4CAF50) : colorScheme.error)),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            if (_isAutdAvailable) ...[
+              _buildFullWidthCard(
+                context,
+                "Daemon Method",
+                _daemonMethod,
+                Icons.sensors_rounded,
+                isError: _daemonMethod == 'Daemon info unavailable' || _daemonMethod == 'Checking Daemon...',
               ),
+              const SizedBox(height: 12),
+            ],
+
+            _buildFullWidthCard(
+              context,
+              "Kernel Information",
+              _systemInfo['kernel'] ?? "-",
+              Icons.settings_system_daydream_rounded,
             ),
       ],
     );
   }
 
-  Widget _buildDetailItem(BuildContext context, String label, String value) {
+  Widget _buildQuickStatCard(BuildContext context, String title, String value, IconData icon, Color iconColor) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                fontFamily: 'monospace',
-                color: colorScheme.primary,
-                fontWeight: FontWeight.bold,
-              ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.5)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: iconColor, size: 28),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'monospace',
+                ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoTile(BuildContext context, String title, String value, IconData icon, {Color? color, bool isMonospace = false}) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final activeColor = color ?? colorScheme.primary;
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: activeColor.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 18, color: activeColor),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        fontFamily: isMonospace ? 'monospace' : null,
+                      ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFullWidthCard(BuildContext context, String title, String value, IconData icon, {bool isError = false}) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final activeColor = isError ? colorScheme.error : colorScheme.primary;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.5)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: activeColor.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: activeColor, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                SelectableText(
+                  value,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'monospace',
+                        color: activeColor,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

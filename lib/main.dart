@@ -4,43 +4,81 @@ import 'dart:ui';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'menus/app_manager_menu.dart';
 import 'menus/custom_helper_menu.dart';
 import 'menus/home_menu.dart';
+import 'menus/about_menu.dart';
 import 'menus/tuning_menu.dart';
 import 'menus/tweaks_menu.dart';
+import 'menus/update_manager.dart';
+import 'theme_manager.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const AozoraApp());
 }
 
-class AozoraApp extends StatelessWidget {
+class AozoraApp extends StatefulWidget {
   const AozoraApp({super.key});
 
   @override
+  State<AozoraApp> createState() => _AozoraAppState();
+}
+
+class _AozoraAppState extends State<AozoraApp> {
+  ThemeMode _themeMode = ThemeMode.dark;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTheme();
+  }
+
+  Future<void> _loadTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    final themeIndex = prefs.getInt('themeMode') ?? 2; // default to dark
+    if (mounted) {
+      setState(() {
+        _themeMode = ThemeMode.values[themeIndex];
+      });
+    }
+  }
+
+  void _setThemeMode(ThemeMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('themeMode', mode.index);
+    if (mounted) {
+      setState(() {
+        _themeMode = mode;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return DynamicColorBuilder(
-      builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
-        return MaterialApp(
-          title: 'Aozora Kernel Manager',
-          debugShowCheckedModeBanner: false,
-          themeMode: ThemeMode.dark,
-          theme: ThemeData(
-            colorScheme: lightDynamic ?? ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-            useMaterial3: true,
-          ),
-          darkTheme: ThemeData(
-            colorScheme: darkDynamic ?? ColorScheme.fromSeed(
-              seedColor: Colors.deepPurple,
-              brightness: Brightness.dark,
+    return AozoraThemeManager(
+      themeMode: _themeMode,
+      setThemeMode: _setThemeMode,
+      child: DynamicColorBuilder(
+        builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
+          return MaterialApp(
+            title: 'Aozora Kernel Manager',
+            debugShowCheckedModeBanner: false,
+            themeMode: _themeMode,
+            theme: ThemeData(
+              colorScheme: lightDynamic ?? ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+              useMaterial3: true,
             ),
-            useMaterial3: true,
-            scaffoldBackgroundColor: const Color(0xFF121212),
-          ),
-          home: const HomePage(),
-        );
-      },
+            darkTheme: ThemeData(
+              colorScheme: darkDynamic ?? ColorScheme.fromSeed(seedColor: Colors.deepPurple, brightness: Brightness.dark),
+              useMaterial3: true,
+            ),
+            home: const HomePage(),
+          );
+        },
+      ),
     );
   }
 }
@@ -60,13 +98,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   bool _isNavigating = false;
 
   bool _isAutdAvailable = false;
+  bool _isAozoraModuleInstalled = false;
 
   // app manager reference
   final GlobalKey<AppManagerMenuState> _appManagerKey = GlobalKey();
 
   final Map<int, GlobalKey> _navKeys = {
     0: GlobalKey(), 1: GlobalKey(), 2: GlobalKey(),
-    3: GlobalKey(), 4: GlobalKey(),
+    3: GlobalKey(), 4: GlobalKey(), 5: GlobalKey(),
   };
 
   late PageController _pageController;
@@ -76,6 +115,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     super.initState();
     _checkAutdAvailability();
     _pageController = PageController(initialPage: _selectedIndex);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      UpdateManager.checkAndUpdate(context);
+    });
   }
 
   @override
@@ -86,10 +128,15 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   Future<void> _checkAutdAvailability() async {
     try {
-      final bool exists = await platform.invokeMethod('checkFileExists', {'path': '/system/bin/autd'});
+      final bool autdExists = await platform.invokeMethod('checkFileExists', {'path': '/system/bin/autd'});
+      final bool moduleExists = await platform.invokeMethod('checkFileExists', {'path': r"$(grep -il 'id=.*aozora' /data/adb/modules/*/module.prop 2>/dev/null | head -n 1)"});
       if (mounted) {
         setState(() {
-          _isAutdAvailable = exists;
+          _isAutdAvailable = autdExists;
+          _isAozoraModuleInstalled = moduleExists;
+          if (_selectedIndex >= _getNavItemCount()) {
+            _selectedIndex = _getNavItemCount() - 1;
+          }
         });
       }
     } catch (e) { /* ignore */ }
@@ -98,6 +145,46 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+
+    final pages = <Widget>[
+      _buildPageWrapper(const HomeMenu()),
+    ];
+    
+    int pageIndex = 0;
+    int appsIndex = -1;
+    final navs = <Widget>[];
+
+    Widget createNav(int keyIndex, IconData icon, String label) {
+      final widget = _buildNavItem(context, _navKeys[keyIndex]!, icon, label, pageIndex);
+      pageIndex++;
+      return widget;
+    }
+
+    navs.add(createNav(0, Icons.home_rounded, "Home"));
+
+    if (_isAutdAvailable || _isAozoraModuleInstalled) {
+      pages.add(_buildPageWrapper(const TuningMenu()));
+      navs.add(const SizedBox(width: 8));
+      navs.add(createNav(1, Icons.tune_rounded, "Tuning"));
+    }
+
+    pages.add(_buildPageWrapper(const TweaksMenu()));
+    navs.add(const SizedBox(width: 8));
+    navs.add(createNav(2, Icons.build_circle_outlined, "Tweaks"));
+
+    pages.add(_buildPageWrapper(const CustomHelperMenu()));
+    navs.add(const SizedBox(width: 8));
+    navs.add(createNav(3, Icons.extension_rounded, "Helper"));
+
+    if (_isAutdAvailable) {
+      appsIndex = pages.length;
+      pages.add(_buildPageWrapper(AppManagerMenu(key: _appManagerKey)));
+      navs.add(const SizedBox(width: 8));
+      navs.add(createNav(4, Icons.apps_rounded, "Apps"));
+    }
+
+    pages.add(_buildPageWrapper(const AboutMenu()));
+    final aboutNavWidget = createNav(5, Icons.info_outline_rounded, "About");
 
     return Scaffold(
       extendBody: true,
@@ -112,15 +199,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             _scrollToActiveNav(index);
           }
         },
-        children: [
-          _buildPageWrapper(const HomeMenu()),
-          _buildPageWrapper(const TuningMenu()),
-          _buildPageWrapper(const TweaksMenu()),
-          _buildPageWrapper(const CustomHelperMenu()),
-          if (_isAutdAvailable) _buildPageWrapper(AppManagerMenu(key: _appManagerKey)),
-        ],
+        children: pages,
       ),
-      floatingActionButton: (_selectedIndex == 4 && _isAutdAvailable)
+      floatingActionButton: (_isAutdAvailable && _selectedIndex == appsIndex)
           ? ClipRRect(
               borderRadius: BorderRadius.circular(18),
               child: BackdropFilter(
@@ -161,7 +242,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(50),
                   border: Border.all(
-                    color: Colors.white.withOpacity(0.15),
+                    color: colorScheme.outlineVariant.withOpacity(0.5),
                     width: 1.2,
                   ),
                   gradient: LinearGradient(
@@ -184,25 +265,28 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                     ),
                   ],
                 ),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      _buildNavItem(context, _navKeys[0]!, Icons.home_rounded, "Home", 0),
-                      const SizedBox(width: 8),
-                      _buildNavItem(context, _navKeys[1]!, Icons.tune_rounded, "Tuning", 1),
-                      const SizedBox(width: 8),
-                      _buildNavItem(context, _navKeys[2]!, Icons.build_circle_outlined, "Tweaks", 2),
-                      const SizedBox(width: 8),
-                      _buildNavItem(context, _navKeys[3]!, Icons.extension_rounded, "Helper", 3),
-                      if (_isAutdAvailable) ...[
-                        const SizedBox(width: 8),
-                        _buildNavItem(context, _navKeys[4]!, Icons.apps_rounded, "Apps", 4),
-                      ],
-                    ],
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.only(left: 8, right: 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: navs,
+                      ),
+                    ),
                   ),
+                  Container(
+                    width: 1,
+                    height: 24,
+                    color: colorScheme.outlineVariant.withOpacity(0.5),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4, right: 8),
+                    child: aboutNavWidget,
+                  ),
+                ],
                 ),
               ),
             ),
@@ -231,9 +315,24 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     );
   }
 
+  GlobalKey? _getActiveNavKey(int index) {
+    int currentIndex = 0;
+    if (index == currentIndex++) return _navKeys[0];
+    if (_isAutdAvailable || _isAozoraModuleInstalled) {
+      if (index == currentIndex++) return _navKeys[1];
+    }
+    if (index == currentIndex++) return _navKeys[2];
+    if (index == currentIndex++) return _navKeys[3];
+    if (_isAutdAvailable) {
+      if (index == currentIndex++) return _navKeys[4];
+    }
+    if (index == currentIndex++) return _navKeys[5];
+    return null;
+  }
+
   void _scrollToActiveNav(int index) {
     if (index >= _getNavItemCount()) return;
-    final key = _navKeys[index];
+    final key = _getActiveNavKey(index);
     if (key == null) return;
     final context = key.currentContext;
     if (context != null) {
@@ -288,7 +387,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           children: [
             Icon(
               icon,
-              color: isSelected ? colorScheme.onPrimaryContainer : Colors.grey,
+              color: isSelected ? colorScheme.onPrimaryContainer : colorScheme.secondary,
             ),
             if (isSelected) ...[
               const SizedBox(width: 8),
@@ -306,5 +405,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     );
   }
 
-  int _getNavItemCount() => _isAutdAvailable ? 5 : 4;
+  int _getNavItemCount() {
+    int count = 4;
+    if (_isAutdAvailable || _isAozoraModuleInstalled) count++;
+    if (_isAutdAvailable) count++;
+    return count;
+  }
 }

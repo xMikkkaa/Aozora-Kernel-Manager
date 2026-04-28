@@ -28,11 +28,15 @@ class _TuningMenuState extends State<TuningMenu> {
   bool _isAutdAvailable = false;
   Timer? _tuningTimer;
 
+  String? _moduleName;
+  String? _moduleVersion;
+
   @override
   void initState() {
     super.initState();
     _checkAutdAvailability();
     _checkProfiles();
+    _checkModule();
     _tuningTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) _checkActiveProfile();
     });
@@ -51,6 +55,26 @@ class _TuningMenuState extends State<TuningMenu> {
         setState(() {
           _isAutdAvailable = exists;
         });
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  Future<void> _checkModule() async {
+    try {
+      final String prop = await platform.invokeMethod('readSystemFile', {'path': r"$(grep -il 'id=.*aozora' /data/adb/modules/*/module.prop 2>/dev/null | head -n 1)"});
+      if (prop.isNotEmpty && prop.toLowerCase().contains('aozora')) {
+        String name = 'Aozora Module';
+        String version = 'Unknown';
+        for (String line in prop.split('\n')) {
+          if (line.startsWith('name=')) name = line.substring(5).trim();
+          if (line.startsWith('version=')) version = line.substring(8).trim();
+        }
+        if (mounted) {
+          setState(() {
+            _moduleName = name;
+            _moduleVersion = version;
+          });
+        }
       }
     } catch (e) { /* ignore */ }
   }
@@ -176,6 +200,52 @@ class _TuningMenuState extends State<TuningMenu> {
               ),
         ),
         const SizedBox(height: 24),
+
+        if (_moduleName != null) ...[
+          Card(
+            elevation: 0,
+            color: colorScheme.primaryContainer.withOpacity(0.3),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(color: colorScheme.primary.withOpacity(0.5)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.memory_rounded, color: colorScheme.primary, size: 32),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _moduleName!,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Version: $_moduleVersion",
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.check_circle_rounded, color: colorScheme.primary),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
+
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),

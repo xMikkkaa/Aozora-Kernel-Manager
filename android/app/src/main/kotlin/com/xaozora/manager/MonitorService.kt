@@ -11,6 +11,11 @@ import android.content.IntentFilter
 import android.os.Build
 import android.os.IBinder
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 class MonitorService : Service() {
 
@@ -19,6 +24,8 @@ class MonitorService : Service() {
         private const val DAEMON_PATH = "/system/bin/autd"
         private const val CHANNEL_ID = "xAozoraService"
     }
+
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -31,6 +38,11 @@ class MonitorService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        if (!File(DAEMON_PATH).exists()) {
+            stopSelf()
+            return
+        }
+
         isServiceRunning = true
         startForeground(1, createNotification())
 
@@ -49,6 +61,10 @@ class MonitorService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (!File(DAEMON_PATH).exists()) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         startForeground(1, createNotification())
         return START_STICKY
     }
@@ -60,6 +76,7 @@ class MonitorService : Service() {
             unregisterReceiver(screenReceiver)
         } catch (e: Exception) {
         }
+        serviceScope.cancel()
     }
 
     override fun onBind(intent: Intent): IBinder? {
@@ -67,19 +84,19 @@ class MonitorService : Service() {
     }
 
     private fun checkAndStartDaemon() {
-        Thread {
-            if (isDaemonRunning()) return@Thread
+        serviceScope.launch {
+            if (isDaemonRunning()) return@launch
 
             try {
                 val f = File(DAEMON_PATH)
-                if (!f.exists()) return@Thread
+                if (!f.exists()) return@launch
 
                 val cmd = "$DAEMON_PATH > /dev/null 2>&1 &"
                 Runtime.getRuntime().exec(arrayOf("su", "-mm", "-c", cmd))
             } catch (e: Exception) {
                 e.printStackTrace()
             }
-        }.start()
+        }
     }
 
     private fun isDaemonRunning(): Boolean {

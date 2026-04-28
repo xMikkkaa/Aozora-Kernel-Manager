@@ -52,6 +52,12 @@
             </intent-filter>
         </receiver>
 
+        <receiver android:name=".PowerSaveReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.os.action.POWER_SAVE_MODE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

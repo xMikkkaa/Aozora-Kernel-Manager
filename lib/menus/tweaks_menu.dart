@@ -102,6 +102,7 @@ class _TweaksMenuState extends State<TweaksMenu> {
     final colorScheme = Theme.of(context).colorScheme;
     final bool? confirm = await showDialog<bool>(
       context: context,
+      barrierColor: Colors.transparent,
       builder: (BuildContext context) {
         return Dialog(
           backgroundColor: Colors.transparent,
@@ -116,14 +117,14 @@ class _TweaksMenuState extends State<TweaksMenu> {
                   color: colorScheme.surfaceContainer.withOpacity(0.25),
                   borderRadius: BorderRadius.circular(28),
                   border: Border.all(
-                    color: Colors.white.withOpacity(0.2),
+                    color: colorScheme.outlineVariant,
                     width: 1,
                   ),
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      Colors.white.withOpacity(0.1),
+                      colorScheme.onSurface.withOpacity(0.05),
                       Colors.transparent,
                     ],
                   ),
@@ -273,7 +274,10 @@ class _TweaksMenuState extends State<TweaksMenu> {
         Card(
           elevation: 0,
           color: colorScheme.surfaceContainer,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: BorderSide(color: colorScheme.outlineVariant.withOpacity(0.5)),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(20.0),
             child: Column(
@@ -369,17 +373,91 @@ class _TweaksMenuState extends State<TweaksMenu> {
 
   Widget _buildToggleCard(BuildContext context, String title, String subtitle, IconData icon, bool value, Function(bool) onChanged) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Card(
-      elevation: 0,
-      color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: SwitchListTile(
-        value: value,
-        onChanged: onChanged,
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(subtitle, style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
-        secondary: Icon(icon, color: value ? colorScheme.primary : colorScheme.onSurfaceVariant),
-        activeColor: colorScheme.primary,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: value ? 20.0 : 0.0, sigmaY: value ? 20.0 : 0.0),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            color: value ? colorScheme.primaryContainer.withOpacity(0.25) : colorScheme.surfaceContainer,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: value ? colorScheme.primary.withOpacity(0.4) : colorScheme.outlineVariant.withOpacity(0.5),
+              width: 1.2,
+            ),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(24),
+              onTap: () => onChanged(!value),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: value ? colorScheme.primary.withOpacity(0.2) : colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        icon,
+                        color: value ? colorScheme.primary : colorScheme.secondary,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: value ? colorScheme.onPrimaryContainer : colorScheme.onSurface,
+                                ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: value ? colorScheme.onPrimaryContainer.withOpacity(0.7) : colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Custom Glass Toggle Indicator
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 52,
+                      height: 28,
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: value ? colorScheme.primary : colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(30),
+                        border: Border.all(
+                          color: value ? colorScheme.primary : colorScheme.outlineVariant.withOpacity(0.5),
+                        ),
+                      ),
+                      alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: value ? colorScheme.onPrimary : colorScheme.outline,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
