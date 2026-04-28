@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:manager/theme_manager.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class AboutMenu extends StatefulWidget {
@@ -16,6 +17,7 @@ class _AboutMenuState extends State<AboutMenu> {
   String _appVersion = "Loading...";
   bool _isAutdAvailable = false;
   String _autdVersionStr = "";
+  bool _autoCheckUpdates = true;
 
   @override
   void initState() {
@@ -25,6 +27,8 @@ class _AboutMenuState extends State<AboutMenu> {
 
   Future<void> _loadInfo() async {
     final info = await PackageInfo.fromPlatform();
+    final prefs = await SharedPreferences.getInstance();
+
     const platform = MethodChannel('com.xaozora.manager/daemon');
     final autdExists = await platform.invokeMethod('checkFileExists', {'path': '/system/bin/autd'});
     
@@ -39,18 +43,27 @@ class _AboutMenuState extends State<AboutMenu> {
         _appVersion = "${info.version}+${info.buildNumber}";
         _isAutdAvailable = autdExists;
         _autdVersionStr = autdVer;
+        _autoCheckUpdates = prefs.getBool('auto_check_updates') ?? true;
       });
     }
   }
 
-  Future<void> _launchGitHub(BuildContext context) async {
-    final Uri url = Uri.parse('https://github.com/xMikkkaa');
+  Future<void> _toggleUpdateCheck(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('auto_check_updates', value);
+    if (mounted) {
+      setState(() => _autoCheckUpdates = value);
+    }
+  }
+
+  Future<void> _launchUrl(BuildContext context, String urlString) async {
+    final Uri url = Uri.parse(urlString);
     try {
       if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
         throw Exception('Could not launch url');
       }
     } catch (e) {
-      await Clipboard.setData(const ClipboardData(text: 'https://github.com/xMikkkaa'));
+      await Clipboard.setData(ClipboardData(text: urlString));
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -117,6 +130,160 @@ class _AboutMenuState extends State<AboutMenu> {
     );
   }
 
+  Widget _buildToggleCard(BuildContext context, String title, String subtitle, IconData icon, bool value, Function(bool) onChanged) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: value ? 20.0 : 0.0, sigmaY: value ? 20.0 : 0.0),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            color: value ? colorScheme.primaryContainer.withOpacity(0.25) : colorScheme.surfaceContainer,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: value ? colorScheme.primary.withOpacity(0.4) : colorScheme.outlineVariant.withOpacity(0.5),
+              width: 1.2,
+            ),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(24),
+              onTap: () => onChanged(!value),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: value ? colorScheme.primary.withOpacity(0.2) : colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        icon,
+                        color: value ? colorScheme.primary : colorScheme.secondary,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: value ? colorScheme.onPrimaryContainer : colorScheme.onSurface,
+                                ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: value ? colorScheme.onPrimaryContainer.withOpacity(0.7) : colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 52,
+                      height: 28,
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: value ? colorScheme.primary : colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(30),
+                        border: Border.all(
+                          color: value ? colorScheme.primary : colorScheme.outlineVariant.withOpacity(0.5),
+                        ),
+                      ),
+                      alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: value ? colorScheme.onPrimary : colorScheme.outline,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileCard(
+    BuildContext context, {
+    required String name,
+    required String role,
+    required String description,
+    String? imageUrl,
+    required IconData actionIcon,
+    required String actionLabel,
+    required String actionUrl,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Card(
+      elevation: 0,
+      color: colorScheme.surfaceContainer,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(28),
+        side: BorderSide(color: colorScheme.outlineVariant.withOpacity(0.5)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [colorScheme.primary, colorScheme.tertiary],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                boxShadow: [
+                  BoxShadow(color: colorScheme.primary.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5)),
+                ],
+              ),
+              child: CircleAvatar(
+                radius: 56,
+                backgroundColor: colorScheme.surfaceContainerHighest,
+                backgroundImage: imageUrl != null ? NetworkImage(imageUrl) : null,
+                child: imageUrl == null ? Icon(Icons.person_rounded, size: 56, color: colorScheme.primary) : null,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(name, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: colorScheme.onSurface)),
+            const SizedBox(height: 6),
+            Text(role, style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: colorScheme.primary, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 16),
+            Text(description, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant, height: 1.5)),
+            const SizedBox(height: 28),
+            FilledButton.icon(
+              onPressed: () => _launchUrl(context, actionUrl),
+              icon: Icon(actionIcon),
+              label: Text(actionLabel),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -134,88 +301,26 @@ class _AboutMenuState extends State<AboutMenu> {
         ),
         const SizedBox(height: 24),
         
-        // Developer Profile Card
-        Card(
-          elevation: 0,
-          color: colorScheme.surfaceContainer,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
-            side: BorderSide(color: colorScheme.outlineVariant.withOpacity(0.5)),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(32.0),
-            child: Column(
-              children: [
-                // Avatar with Gradient Border
-                Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [colorScheme.primary, colorScheme.tertiary],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: colorScheme.primary.withOpacity(0.3),
-                        blurRadius: 15,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
-                  ),
-                  child: const CircleAvatar(
-                    radius: 56,
-                    backgroundImage: NetworkImage('https://avatars.githubusercontent.com/xMikkkaa'),
-                    backgroundColor: Colors.transparent,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                
-                // Name & Role
-                Text(
-                  "xMikkkaa",
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.onSurface,
-                      ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  "LIP",
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-                const SizedBox(height: 16),
-                
-                // Description
-                Text(
-                  "Creator of Aozora Kernel Manager and Automation Daemon.",
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                        height: 1.5,
-                      ),
-                ),
-                const SizedBox(height: 28),
-                
-                // Action Button
-                FilledButton.icon(
-                  onPressed: () => _launchGitHub(context),
-                  icon: const Icon(Icons.code_rounded),
-                  label: const Text("View GitHub Profile"),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+        // Developer Profile Cards
+        _buildProfileCard(
+          context,
+          name: "Yuu507",
+          role: "Kernel Developer",
+          description: "Creator and Maintainer of Aozora Kernel.",
+          actionIcon: Icons.send_rounded,
+          actionLabel: "View Telegram Profile",
+          actionUrl: "https://t.me/Yuu507",
+        ),
+        const SizedBox(height: 16),
+        _buildProfileCard(
+          context,
+          name: "xMikkkaa",
+          role: "LIP",
+          description: "Creator of Aozora Kernel Manager and Automation Daemon.",
+          imageUrl: 'https://avatars.githubusercontent.com/xMikkkaa',
+          actionIcon: Icons.code_rounded,
+          actionLabel: "View GitHub Profile",
+          actionUrl: "https://github.com/xMikkkaa",
         ),
         const SizedBox(height: 24),
 
@@ -252,6 +357,24 @@ class _AboutMenuState extends State<AboutMenu> {
               ),
             ),
           ),
+        ),
+        const SizedBox(height: 24),
+
+        // Updates Card
+        Text(
+          "Updates",
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+        const SizedBox(height: 12),
+        _buildToggleCard(
+          context,
+          "Auto Check for Updates",
+          "Automatically check for app and daemon updates on startup.",
+          Icons.update_rounded,
+          _autoCheckUpdates,
+          (val) => _toggleUpdateCheck(val),
         ),
         const SizedBox(height: 24),
         

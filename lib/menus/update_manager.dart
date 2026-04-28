@@ -4,6 +4,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class UpdateManager {
   static const platform = MethodChannel('com.xaozora.manager/daemon');
@@ -11,12 +13,18 @@ class UpdateManager {
 
   static Future<void> checkAndUpdate(BuildContext context) async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final autoCheck = prefs.getBool('auto_check_updates') ?? true;
+      if (!autoCheck) return;
+
       bool appNeedsUpdate = false;
       bool autdNeedsUpdate = false;
       String? latestAppUrl;
       String? latestAutdUrl;
       String newAppVersion = "";
       String newAutdVersion = "";
+      String appReleaseNotes = "";
+      String autdReleaseNotes = "";
 
       // 1. Cek App Update
       final packageInfo = await PackageInfo.fromPlatform();
@@ -25,6 +33,7 @@ class UpdateManager {
       try {
         final appResp = await _dio.get('https://api.github.com/repos/xMikkkaa/Aozora-Kernel-Manager/releases/latest');
         newAppVersion = appResp.data['tag_name'].toString().replaceAll('v', '');
+        appReleaseNotes = appResp.data['body']?.toString() ?? "No release notes provided.";
         if (_isVersionGreater(newAppVersion, currentAppVersion)) {
           appNeedsUpdate = true;
           final assets = appResp.data['assets'] as List;
@@ -44,6 +53,7 @@ class UpdateManager {
 
           if (shaAsset != null && autdAsset != null) {
             newAutdVersion = autdResp.data['tag_name'].toString().replaceAll('v', '');
+            autdReleaseNotes = autdResp.data['body']?.toString() ?? "No release notes provided.";
             final shaResp = await _dio.get(shaAsset['browser_download_url']);
             final expectedSha = shaResp.data.toString().trim().split(' ').first;
 
@@ -64,7 +74,7 @@ class UpdateManager {
       // 3. Tampilkan Modal jika ada update
       if ((appNeedsUpdate && latestAppUrl != null) || (autdNeedsUpdate && latestAutdUrl != null)) {
         if (context.mounted) {
-          _showUpdateModal(context, appNeedsUpdate, autdNeedsUpdate, latestAppUrl, latestAutdUrl, newAppVersion, newAutdVersion);
+          _showUpdateModal(context, appNeedsUpdate, autdNeedsUpdate, latestAppUrl, latestAutdUrl, newAppVersion, newAutdVersion, appReleaseNotes, autdReleaseNotes);
         }
       }
     } catch (e) {
@@ -84,9 +94,10 @@ class UpdateManager {
     return false;
   }
 
-  static void _showUpdateModal(BuildContext context, bool updateApp, bool updateAutd, String? appUrl, String? autdUrl, String newAppVer, String newAutdVer) {
+  static void _showUpdateModal(BuildContext context, bool updateApp, bool updateAutd, String? appUrl, String? autdUrl, String newAppVer, String newAutdVer, String appNotes, String autdNotes) {
     final colorScheme = Theme.of(context).colorScheme;
     bool isDownloading = false;
+    bool isSuccess = false;
 
     showDialog(
       context: context,
@@ -118,21 +129,43 @@ class UpdateManager {
                           style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
-                        Text(
-                          '${updateApp ? "• App Version v$newAppVer\n" : ""}${updateAutd ? "• AUTD Daemon v$newAutdVer" : ""}',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+                        Flexible(
+                          child: SingleChildScrollView(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (updateApp) ...[
+                                  Text('App v$newAppVer', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: colorScheme.primary)),
+                                  const SizedBox(height: 4),
+                                  Text(appNotes, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant)),
+                                  if (updateAutd) const SizedBox(height: 16),
+                                ],
+                                if (updateAutd) ...[
+                                  Text('AUTD v$newAutdVer', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: colorScheme.primary)),
+                                  const SizedBox(height: 4),
+                                  Text(autdNotes, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant)),
+                                ],
+                              ],
+                            ),
+                          ),
                         ),
-                        const SizedBox(height: 24),
-                        isDownloading
+                        isSuccess
                             ? Column(
                                 children: [
-                                  CircularProgressIndicator(color: colorScheme.primary),
+                                  Icon(Icons.check_circle_rounded, color: colorScheme.primary, size: 48),
                                   const SizedBox(height: 16),
-                                  Text("Downloading & Installing...", style: TextStyle(color: colorScheme.primary)),
+                                  Text("Update Completed!", style: TextStyle(color: colorScheme.primary, fontWeight: FontWeight.bold)),
                                 ],
                               )
-                            : Row(
+                            : isDownloading
+                                ? Column(
+                                    children: [
+                                      CircularProgressIndicator(color: colorScheme.primary),
+                                      const SizedBox(height: 16),
+                                      Text("Downloading & Installing...", style: TextStyle(color: colorScheme.primary)),
+                                    ],
+                                  )
+                                : Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                 children: [
                                   TextButton(
@@ -142,8 +175,18 @@ class UpdateManager {
                                   FilledButton(
                                     onPressed: () async {
                                       setState(() => isDownloading = true);
-                                      await _performUpdate(updateApp, updateAutd, appUrl, autdUrl, newAutdVer);
-                                      if (context.mounted) Navigator.of(context).pop();
+                                      final success = await _performUpdate(updateApp, updateAutd, appUrl, autdUrl, newAutdVer);
+                                      if (context.mounted) {
+                                        if (updateAutd && !updateApp && success) {
+                                          setState(() { isDownloading = false; isSuccess = true; });
+                                          Future.delayed(const Duration(milliseconds: 1500), () {
+                                            if (context.mounted) Navigator.of(context).pop();
+                                          });
+                                        } else {
+                                          // Jika update App, modal langsung tutup karena UI installer system akan muncul
+                                          Navigator.of(context).pop();
+                                        }
+                                      }
                                     },
                                     style: FilledButton.styleFrom(
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -164,11 +207,13 @@ class UpdateManager {
     );
   }
 
-  static Future<void> _performUpdate(bool updateApp, bool updateAutd, String? appUrl, String? autdUrl, String newAutdVer) async {
+  static Future<bool> _performUpdate(bool updateApp, bool updateAutd, String? appUrl, String? autdUrl, String newAutdVer) async {
+    bool success = true;
     try {
+      final tempDir = await getTemporaryDirectory();
+
       if (updateAutd && autdUrl != null) {
-        // Download AUTD & Replace in Module
-        final autdTempPath = '/data/local/tmp/autd_update';
+        final autdTempPath = '${tempDir.path}/autd_update';
         await _dio.download(autdUrl, autdTempPath);
         
         final shellScript = '''
@@ -178,31 +223,44 @@ class UpdateManager {
             cp "$autdTempPath" "\$MOD_DIR/system/bin/autd"
             chmod 755 "\$MOD_DIR/system/bin/autd"
             
-            # Kill & Restart autd so new version runs immediately
             killall autd
             nohup "\$MOD_DIR/system/bin/autd" > /dev/null 2>&1 &
           fi
-          rm "$autdTempPath"
+          rm -f "$autdTempPath"
         ''';
         await platform.invokeMethod('executeScript', {'script': shellScript});
         await platform.invokeMethod('writeSystemFile', {'path': '/data/data/com.xaozora.manager/files/autd_version', 'value': newAutdVer});
       }
 
       if (updateApp && appUrl != null) {
-        // Download APK & Install via pm install
-        final apkTempPath = '/data/local/tmp/aozora_update.apk';
+        final apkTempPath = '${tempDir.path}/aozora_update.apk';
         await _dio.download(appUrl, apkTempPath);
         
         final shellScript = '''
-          pm install -r "$apkTempPath"
-          rm "$apkTempPath"
-          am start -n com.xaozora.manager/com.xaozora.manager.MainActivity
+          cp "$apkTempPath" /data/local/tmp/aozora_update.apk
+          chmod 777 /data/local/tmp/aozora_update.apk
+          
+          OLD_VER=\$(dumpsys package com.xaozora.manager | grep versionName | head -n 1)
+          
+          am start -a android.intent.action.VIEW -d "file:///data/local/tmp/aozora_update.apk" -t application/vnd.android.package-archive
+          rm -f "$apkTempPath"
+          
+          (
+            for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+              sleep 10
+              NEW_VER=\$(dumpsys package com.xaozora.manager | grep versionName | head -n 1)
+              if [ "\$OLD_VER" != "\$NEW_VER" ]; then
+                break
+              fi
+            done
+            rm -f /data/local/tmp/aozora_update.apk
+          ) &
         ''';
         await platform.invokeMethod('executeScript', {'script': shellScript});
-        // Note: app will be force killed by system during package update
       }
     } catch (e) {
-      // Fail gracefully
+      success = false;
     }
+    return success;
   }
 }
