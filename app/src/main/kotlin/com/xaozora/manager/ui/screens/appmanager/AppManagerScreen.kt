@@ -96,6 +96,8 @@ fun AppManagerScreen(
     var configuredApps by remember { mutableStateOf(emptyList<ConfiguredApp>()) }
     var allApps by remember { mutableStateOf(emptyList<AppInfoItem>()) }
     var isLoadingApps by remember { mutableStateOf(true) }
+    var gamingExists by remember { mutableStateOf(false) }
+    var gaming2Exists by remember { mutableStateOf(false) }
 
     var showAddSheet by remember { mutableStateOf(false) }
     var appToEdit by remember { mutableStateOf<ConfiguredApp?>(null) }
@@ -108,9 +110,25 @@ fun AppManagerScreen(
 
     fun refreshApps() {
         scope.launch(Dispatchers.IO) {
+            val gExists = RootShellHelper.checkFileExists("/system/bin/gaming")
+            val g2Exists = RootShellHelper.checkFileExists("/system/bin/gaming2")
+
             val apps = AppManagerUtils.getConfiguredApps(context)
+            val correctedApps = apps.map { config ->
+                if ((config.mode == "g" && !gExists) || (config.mode == "g2" && !g2Exists)) {
+                    val packageName = config.app.packageName
+                    val cmd = "sed -i '/^${packageName}_/d' /data/data/com.xaozora.manager/files/applist; echo \"${packageName}_p\" >> /data/data/com.xaozora.manager/files/applist"
+                    RootShellHelper.executeCmd(cmd)
+                    config.copy(mode = "p")
+                } else {
+                    config
+                }
+            }
+
             withContext(Dispatchers.Main) {
-                configuredApps = apps
+                gamingExists = gExists
+                gaming2Exists = g2Exists
+                configuredApps = correctedApps
                 isLoadingApps = false
             }
         }
@@ -315,7 +333,9 @@ fun AppManagerScreen(
                         onRemove = { pkg ->
                             appToEdit = null
                             removeAppFromConfig(pkg)
-                        }
+                        },
+                        gamingExists = gamingExists,
+                        gaming2Exists = gaming2Exists
                     )
                 }
             }
@@ -386,9 +406,21 @@ private fun ConfiguredAppItem(config: ConfiguredApp, hazeState: HazeState, onCli
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EditAppSheetContent(config: ConfiguredApp, onUpdateMode: (String, String) -> Unit, onRemove: (String) -> Unit) {
+private fun EditAppSheetContent(
+    config: ConfiguredApp,
+    onUpdateMode: (String, String) -> Unit,
+    onRemove: (String) -> Unit,
+    gamingExists: Boolean,
+    gaming2Exists: Boolean
+) {
     var selectedMode by remember { mutableStateOf(config.mode) }
-    val modes = listOf("p" to "Perf", "g" to "Gaming", "g2" to "Gaming+")
+    val modes = remember(gamingExists, gaming2Exists) {
+        listOfNotNull(
+            "p" to "Perf",
+            if (gamingExists) "g" to "Gaming" else null,
+            if (gaming2Exists) "g2" to "Gaming+" else null
+        )
+    }
     val colorScheme = MaterialTheme.colorScheme
 
     Column(modifier = Modifier.fillMaxWidth().padding(24.dp).navigationBarsPadding(), horizontalAlignment = Alignment.CenterHorizontally) {
