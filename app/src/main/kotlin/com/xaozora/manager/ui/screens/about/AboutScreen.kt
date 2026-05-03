@@ -44,7 +44,6 @@ import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.Update
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -62,7 +61,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -79,6 +77,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import androidx.compose.foundation.layout.navigationBarsPadding
 import com.xaozora.manager.core.shell.RootShellHelper
 import com.xaozora.manager.core.network.UpdateManager
 import com.xaozora.manager.core.network.UpdateCheckResult
@@ -139,7 +138,7 @@ fun AboutScreen(
             val autdExists = RootShellHelper.checkFileExists("/system/bin/autd")
             isAutdAvailable = autdExists
             if (autdExists) {
-                val v = RootShellHelper.readSystemFile("/data/data/com.xaozora.manager/files/autd_version").trim()
+                val v = RootShellHelper.readSystemFile("${context.filesDir.path}/autd_version").trim()
                 autdVersionStr = v.ifBlank { "Unknown" }
             }
 
@@ -259,7 +258,7 @@ fun AboutScreen(
                         } else {
                             snackbarHostState.showSnackbar("You are on the latest version.")
                         }
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         snackbarHostState.showSnackbar("Failed to check for updates.")
                     } finally {
                         isCheckingUpdate = false
@@ -303,7 +302,8 @@ fun AboutScreen(
                 }
             }
         }
-        Spacer(modifier = Modifier.height(100.dp))
+        Spacer(modifier = Modifier.height(140.dp))
+        Spacer(modifier = Modifier.navigationBarsPadding())
         }
     }
 
@@ -338,10 +338,7 @@ fun AboutScreen(
                     snackbarHostState.showSnackbar("Downloading update in background...")
                     
                     if (isAppUpdate) {
-                        val success = UpdateManager.performAppUpdate(result.appUpdate.downloadUrl, context.cacheDir)
-                        if (!success) {
-                            snackbarHostState.showSnackbar("App update failed. Please try again.")
-                        }
+                        UpdateManager.performAppUpdate(result.appUpdate.downloadUrl, context.cacheDir)
                     } else if (isAutdUpdate) {
                         val success = UpdateManager.performAutdUpdate(
                             result.autdUpdate.downloadUrl, 

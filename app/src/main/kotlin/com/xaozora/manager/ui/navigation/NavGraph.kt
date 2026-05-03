@@ -9,7 +9,6 @@ import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material3.Text
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -23,19 +22,14 @@ import com.xaozora.manager.ui.screens.appmanager.AppManagerScreen
 import com.xaozora.manager.ui.screens.about.AboutScreen
 import dev.chrisbanes.haze.HazeState
 
-sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
-    data object Home : Screen("home", "Home", Icons.Rounded.Home)
-    data object Tuning : Screen("tuning", "Tuning", Icons.Rounded.Tune)
-    data object Tweaks : Screen("tweaks", "Tweaks", Icons.Outlined.Build)
-    data object CustomHelper : Screen("helper", "Helper", Icons.Rounded.Extension)
-    data object AppManager : Screen("apps", "Apps", Icons.Rounded.Apps)
-    data object About : Screen("about", "About", Icons.Outlined.Info)
+sealed class Screen(val title: String, val icon: ImageVector) {
+    data object Home : Screen("Home", Icons.Rounded.Home)
+    data object Tuning : Screen("Tuning", Icons.Rounded.Tune)
+    data object Tweaks : Screen("Tweaks", Icons.Outlined.Build)
+    data object CustomHelper : Screen("Helper", Icons.Rounded.Extension)
+    data object AppManager : Screen("Apps", Icons.Rounded.Apps)
+    data object About : Screen("About", Icons.Outlined.Info)
 }
-
-val primaryScreens = listOf(
-    Screen.Home, Screen.Tuning, Screen.Tweaks, Screen.CustomHelper, Screen.AppManager
-)
-val allScreens = primaryScreens + Screen.About
 
 @Composable
 fun getAvailableScreens(isAutdAvailable: Boolean, isModuleInstalled: Boolean): List<Screen> {
@@ -57,7 +51,8 @@ fun AozoraNavGraph(
     pagerState: PagerState,
     hazeState: HazeState,
     snackbarHostState: SnackbarHostState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onAddClick: (() -> Unit) -> Unit = {}
 ) {
     HorizontalPager(
         state = pagerState,
@@ -68,7 +63,11 @@ fun AozoraNavGraph(
             Screen.Tuning -> TuningScreen(hazeState = hazeState, snackbarHostState = snackbarHostState)
             Screen.Tweaks -> TweaksScreen(hazeState = hazeState, snackbarHostState = snackbarHostState)
             Screen.CustomHelper -> CustomHelperScreen(hazeState = hazeState, snackbarHostState = snackbarHostState)
-            Screen.AppManager -> AppManagerScreen(hazeState = hazeState, snackbarHostState = snackbarHostState)
+            Screen.AppManager -> AppManagerScreen(
+                hazeState = hazeState, 
+                snackbarHostState = snackbarHostState,
+                onAddClickProvider = onAddClick
+            )
             Screen.About -> AboutScreen(hazeState = hazeState, snackbarHostState = snackbarHostState)
             else -> HomeScreen(hazeState = hazeState)
         }

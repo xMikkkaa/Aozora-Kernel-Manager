@@ -1,8 +1,5 @@
 package com.xaozora.manager.ui.components
 
-import android.graphics.RenderEffect
-import android.graphics.Shader
-import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -23,34 +20,33 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.xaozora.manager.ui.navigation.Screen
-import com.xaozora.manager.ui.navigation.primaryScreens
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
@@ -63,13 +59,13 @@ fun AozoraBottomNav(
     onItemSelected: (Int) -> Unit,
     isVisible: Boolean,
     hazeState: HazeState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onAddClick: (() -> Unit)? = null,
 ) {
     val lazyListState = rememberLazyListState()
     val density = LocalDensity.current
 
     val primaryScreens = remember(screens) { screens.filter { it != Screen.About } }
-    val aboutScreen = Screen.About
 
     val surfaceContainer = MaterialTheme.colorScheme.surfaceContainer
     val strongBlurStyle = remember(surfaceContainer) {
@@ -81,79 +77,122 @@ fun AozoraBottomNav(
     }
 
     LaunchedEffect(selectedIndex) {
-        if (selectedIndex < primaryScreens.size) {
-            val viewportWidth = lazyListState.layoutInfo.viewportSize.width
-            val centerOffset = if (viewportWidth > 0) {
-                val itemWidth = with(density) { 120.dp.roundToPx() }
-                (viewportWidth - itemWidth) / 2
+        val primaryIndex = selectedIndex.takeIf { it < primaryScreens.size } ?: -1
+        
+        if (primaryIndex != -1) {
+            val isLastItem = primaryIndex == primaryScreens.size - 1
+            
+            if (isLastItem) {
+                lazyListState.animateScrollToItem(primaryIndex, scrollOffset = 0)
             } else {
-                with(density) { 90.dp.roundToPx() }
+                val viewportWidth = lazyListState.layoutInfo.viewportSize.width
+                val centerOffset = if (viewportWidth > 0) {
+                    val itemWidth = with(density) { 120.dp.roundToPx() }
+                    (viewportWidth - itemWidth) / 2
+                } else {
+                    with(density) { 90.dp.roundToPx() }
+                }
+                lazyListState.animateScrollToItem(primaryIndex, scrollOffset = -centerOffset)
             }
-            lazyListState.animateScrollToItem(selectedIndex, scrollOffset = -centerOffset)
         }
     }
 
-    AnimatedVisibility(
-        visible = isVisible,
-        enter = slideInVertically(animationSpec = tween(200), initialOffsetY = { it }),
-        exit = slideOutVertically(animationSpec = tween(200), targetOffsetY = { it }),
-        modifier = modifier.navigationBarsPadding()
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.BottomCenter
     ) {
-        Box(
+        AnimatedVisibility(
+            visible = onAddClick != null,
+            enter = fadeIn() + slideInVertically { it / 2 },
+            exit = fadeOut() + slideOutVertically { it / 2 },
             modifier = Modifier
-                .padding(start = 40.dp, end = 40.dp, bottom = 20.dp)
-                .fillMaxWidth()
-                .height(70.dp)
+                .align(Alignment.BottomEnd)
+                .padding(end = 40.dp, bottom = 110.dp)
+                .navigationBarsPadding()
         ) {
             Box(
                 modifier = Modifier
-                    .matchParentSize()
-                    .clip(CircleShape)
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(16.dp))
                     .hazeEffect(state = hazeState, style = strongBlurStyle)
                     .border(
                         width = 1.2.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                        shape = CircleShape
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(16.dp)
                     )
-            )
-
-            Row(
-                modifier = Modifier.fillMaxSize(),
-                verticalAlignment = Alignment.CenterVertically
+                    .clickable { onAddClick?.invoke() },
+                contentAlignment = Alignment.Center
             ) {
-                LazyRow(
-                    state = lazyListState,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    itemsIndexed(primaryScreens) { index, screen ->
-                        NavItem(
-                            screen = screen,
-                            isSelected = selectedIndex == index,
-                            onClick = { onItemSelected(index) }
-                        )
-                    }
-                }
+                Icon(
+                    imageVector = Icons.Rounded.Add,
+                    contentDescription = "Add",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
 
+        AnimatedVisibility(
+            visible = isVisible,
+            enter = slideInVertically(animationSpec = tween(200)) { it },
+            exit = slideOutVertically(animationSpec = tween(200)) { it },
+            modifier = Modifier.navigationBarsPadding()
+        ) {
+            Box(
+                modifier = Modifier
+                    .padding(start = 40.dp, end = 40.dp, bottom = 20.dp)
+                    .fillMaxWidth()
+                    .height(70.dp)
+            ) {
                 Box(
                     modifier = Modifier
-                        .width(1.dp)
-                        .height(24.dp)
-                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        .matchParentSize()
+                        .clip(CircleShape)
+                        .hazeEffect(state = hazeState, style = strongBlurStyle)
+                        .border(
+                            width = 1.2.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                            shape = CircleShape
+                        )
                 )
 
                 Row(
-                    modifier = Modifier.padding(start = 4.dp, end = 8.dp),
+                    modifier = Modifier.fillMaxSize(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    NavItem(
-                        screen = Screen.About,
-                        isSelected = selectedIndex == screens.indexOf(Screen.About),
-                        onClick = { onItemSelected(screens.indexOf(Screen.About)) }
+                    LazyRow(
+                        state = lazyListState,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        itemsIndexed(primaryScreens) { index, screen ->
+                            NavItem(
+                                screen = screen,
+                                isSelected = selectedIndex == index,
+                                onClick = { onItemSelected(index) }
+                            )
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(24.dp)
+                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     )
+
+                    Row(
+                        modifier = Modifier.padding(start = 4.dp, end = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        NavItem(
+                            screen = Screen.About,
+                            isSelected = selectedIndex == screens.indexOf(Screen.About),
+                            onClick = { onItemSelected(screens.indexOf(Screen.About)) }
+                        )
+                    }
                 }
             }
         }

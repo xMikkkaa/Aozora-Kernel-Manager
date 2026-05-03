@@ -24,6 +24,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class MonitorService : Service() {
 
@@ -35,7 +37,8 @@ class MonitorService : Service() {
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    
+    private val daemonMutex = Mutex()
+
     private var powerObserver: ContentObserver? = null
 
     private val screenReceiver = object : BroadcastReceiver() {
@@ -50,6 +53,9 @@ class MonitorService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "Service onCreate")
+        
+        isServiceRunning = true
+        startServiceForeground()
 
         serviceScope.launch {
             try {
@@ -62,9 +68,6 @@ class MonitorService : Service() {
                     stopSelf()
                     return@launch
                 }
-
-                isServiceRunning = true
-                startServiceForeground()
 
                 val filter = IntentFilter().apply {
                     addAction(Intent.ACTION_SCREEN_ON)
@@ -97,13 +100,19 @@ class MonitorService : Service() {
 
     private fun startServiceForeground() {
         try {
+            val notification = createNotification()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                startForeground(1, createNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+                startForeground(888, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
             } else {
-                startForeground(1, createNotification())
+                startForeground(888, notification)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start service in foreground", e)
+            try {
+                startForeground(888, createNotification())
+            } catch (e2: Exception) {
+                Log.e(TAG, "Critical: Could not start foreground at all", e2)
+            }
         }
     }
 
@@ -143,34 +152,46 @@ class MonitorService : Service() {
 
     private fun checkAndStartDaemon() {
         serviceScope.launch {
-            if (isDaemonRunning()) {
-                Log.d(TAG, "Daemon is already running, skipping startup to prevent double process")
-                return@launch
-            }
-            try {
-                Log.d(TAG, "Starting daemon: $DAEMON_PATH")
-                val cmd = "$DAEMON_PATH > /dev/null 2>&1 &"
-                RootShellHelper.executeCmd(cmd)
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to start daemon", e)
+            daemonMutex.withLock {
+                if (isDaemonRunning()) {
+                    Log.d(TAG, "Daemon is already running, skipping startup")
+                    return@withLock
+                }
+                try {
+                    Log.d(TAG, "Starting daemon: $DAEMON_PATH")
+                    val cmd = "export PATH=\$PATH:/system/bin:/system/xbin; $DAEMON_PATH > /dev/null 2>&1 &"
+                    if (RootShellHelper.executeCmd(cmd)) {
+                        delay(1500L)
+                        Log.d(TAG, "Daemon start command executed, waited for stabilization")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to start daemon", e)
+                }
             }
         }
     }
 
     private fun isDaemonRunning(): Boolean {
         return try {
-            val cmd = "pidof autd > /dev/null || pgrep -x autd > /dev/null || ps -A | grep autd | grep -v grep > /dev/null"
-            RootShellHelper.executeCmd(cmd)
-        } catch (e: Exception) {
-            false
+            val cmd = "pgrep -x autd"
+            val output = RootShellHelper.executeCmdAndGetOutput(cmd)
+            output.isNotBlank() && (output.toLongOrNull() != null)
+        } catch (_: Exception) {
+            try {
+                val cmdFallback = "pidof autd"
+                RootShellHelper.executeCmdAndGetOutput(cmdFallback).isNotBlank()
+            } catch (_: Exception) {
+                false
+            }
         }
     }
 
     private fun createNotification(): Notification {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channel = NotificationChannel(
-            CHANNEL_ID, "Aozora Monitor Service", NotificationManager.IMPORTANCE_MIN
+            CHANNEL_ID, "Aozora Monitor Service", NotificationManager.IMPORTANCE_LOW
         )
-        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        nm.createNotificationChannel(channel)
 
         val builder = Notification.Builder(this, CHANNEL_ID)
 
@@ -180,13 +201,13 @@ class MonitorService : Service() {
     }
 
     private fun showNoAutdNotification() {
-        val nm = getSystemService(NotificationManager::class.java)
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val builder = Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("Aozora Kernel Manager")
             .setContentText("AUTD Binary not installed. Service disabled.")
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setAutoCancel(true)
         
-        nm.notify(1, builder.build())
+        nm.notify(889, builder.build())
     }
 }

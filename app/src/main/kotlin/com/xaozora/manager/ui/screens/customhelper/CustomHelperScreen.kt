@@ -56,9 +56,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.foundation.layout.navigationBarsPadding
 import com.xaozora.manager.core.shell.RootShellHelper
 import com.xaozora.manager.ui.components.GlassCard
 import dev.chrisbanes.haze.HazeState
@@ -92,7 +92,6 @@ fun CustomHelperScreen(
     var selectedZipUri by remember { mutableStateOf<Uri?>(null) }
     var selectedFileName by remember { mutableStateOf<String?>(null) }
     var useAutd by remember { mutableStateOf(false) }
-    var isAutdReady by remember { mutableStateOf(false) }
     var isInstalling by remember { mutableStateOf(false) }
     var statusText by remember { mutableStateOf("Select a module ZIP to begin") }
 
@@ -115,7 +114,6 @@ fun CustomHelperScreen(
             val autdFile = File(context.filesDir, "autd")
             val shaFile = File(context.filesDir, "autd.sha256")
             if (autdFile.exists() && shaFile.exists()) {
-                isAutdReady = true
             }
         }
     }
@@ -156,10 +154,9 @@ fun CustomHelperScreen(
                     if (!needsDownload) {
                         withContext(Dispatchers.Main) {
                             useAutd = true
-                            isAutdReady = true
                             statusText = "AUTD binary verified and ready."
                         }
-                        RootShellHelper.writeSystemFile("/data/data/com.xaozora.manager/files/autd_version", autdTag)
+                        RootShellHelper.writeSystemFile("${context.filesDir.path}/autd_version", autdTag)
                         return@launch
                     }
 
@@ -179,7 +176,7 @@ fun CustomHelperScreen(
 
                         tempFile.renameTo(autdFile)
                         File(context.filesDir, "autd.sha256").writeText(remoteSha)
-                        RootShellHelper.writeSystemFile("/data/data/com.xaozora.manager/files/autd_version", autdTag)
+                        RootShellHelper.writeSystemFile("${context.filesDir.path}/autd_version", autdTag)
 
                         val elapsed = System.currentTimeMillis() - startTime
                         if (elapsed < 1500) delay(1500 - elapsed)
@@ -187,7 +184,6 @@ fun CustomHelperScreen(
                         withContext(Dispatchers.Main) {
                             showDownloadDialog = false
                             useAutd = true
-                            isAutdReady = true
                             statusText = "AUTD downloaded and verified."
                         }
                     } finally {
@@ -259,15 +255,15 @@ fun CustomHelperScreen(
 
                     withContext(Dispatchers.Main) { statusText = "Executing root installation..." }
 
-                    val shellScript = """
-                        cp "${tempZipFile.absolutePath}" /data/local/tmp/aozora_update.zip
+                    val shellScript = $$"""
+                        cp "$${tempZipFile.absolutePath}" /data/local/tmp/aozora_update.zip
                         chmod 755 /data/local/tmp/aozora_update.zip
                         
-                        EXISTING=${'$'}(grep -il 'id=.*aozora' /data/adb/modules/*/module.prop 2>/dev/null | head -n 1)
-                        if [ ! -z "${'$'}EXISTING" ]; then
-                          MOD_DIR=${'$'}(dirname "${'$'}EXISTING")
-                          echo "Cleaning old module at ${'$'}MOD_DIR"
-                          rm -rf "${'$'}MOD_DIR"
+                        EXISTING=$(grep -il 'id=.*aozora' /data/adb/modules/*/module.prop 2>/dev/null | head -n 1)
+                        if [ ! -z "$EXISTING" ]; then
+                          MOD_DIR=$(dirname "$EXISTING")
+                          echo "Cleaning old module at $MOD_DIR"
+                          rm -rf "$MOD_DIR"
                         fi
 
                         if [ -f /data/adb/magisk/magisk ]; then
@@ -436,7 +432,8 @@ fun CustomHelperScreen(
             }
             }
         }
-        Spacer(modifier = Modifier.height(100.dp))
+        Spacer(modifier = Modifier.height(140.dp))
+        Spacer(modifier = Modifier.navigationBarsPadding())
         }
     }
 }
@@ -469,7 +466,10 @@ private fun downloadFile(urlStr: String, dest: File, onProgress: (Float) -> Unit
 
 private fun hashFile(file: File): String {
     val md = MessageDigest.getInstance("SHA-256")
-    DigestInputStream(file.inputStream(), md).use { while (it.read(ByteArray(8192)) != -1) { } }
+    DigestInputStream(file.inputStream(), md).use { dis -> 
+        val buffer = ByteArray(8192)
+        while (dis.read(buffer) != -1) { } 
+    }
     return md.digest().joinToString("") { "%02x".format(it) }
 }
 

@@ -5,8 +5,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ServiceInfo
-import android.os.Build
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
@@ -76,10 +74,6 @@ class BootWorker(
             .setSmallIcon(android.R.drawable.ic_popup_sync)
             .build()
 
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            ForegroundInfo(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else {
-            ForegroundInfo(NOTIFICATION_ID, notification)
-        }
+        return ForegroundInfo(NOTIFICATION_ID, notification)
     }
 }

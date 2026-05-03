@@ -37,7 +37,11 @@
             android:name=".services.MonitorService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="specialUse" /> 
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_TYPE"
+                android:value="Monitoring system state and managing automation daemon for kernel tuning." />
+        </service>
 
         <receiver
             android:name=".services.BootReceiver"

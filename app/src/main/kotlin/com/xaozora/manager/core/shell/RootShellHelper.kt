@@ -33,6 +33,10 @@ object RootShellHelper {
                 output.append(line).append("\n")
             }
             process.waitFor()
+            
+            os.close()
+            reader.close()
+
             output.toString().trim()
         } catch (e: Exception) {
             e.printStackTrace()

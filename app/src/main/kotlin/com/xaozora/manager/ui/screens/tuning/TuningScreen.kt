@@ -68,7 +68,9 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.navigationBarsPadding
 import com.xaozora.manager.core.shell.RootShellHelper
 import com.xaozora.manager.ui.components.GlassCard
 import dev.chrisbanes.haze.HazeState
@@ -100,6 +102,7 @@ fun TuningScreen(
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var isAutdAvailable by remember { mutableStateOf(false) }
     var moduleName by remember { mutableStateOf<String?>(null) }
@@ -150,7 +153,7 @@ fun TuningScreen(
             withContext(Dispatchers.IO) {
                 while (true) {
                     val status =
-                        RootShellHelper.readSystemFile("/data/data/com.xaozora.manager/files/autd_status")
+                        RootShellHelper.readSystemFile("${context.filesDir.path}/autd_status")
                             .trim()
                     if (status.isNotBlank()) activeProfileId = status
                     delay(1000)
@@ -291,7 +294,7 @@ fun TuningScreen(
                                 val cmd = if (profile.id == "cachecleaner") {
                                     "/system/bin/cachecleaner"
                                 } else if (isAutdAvailable) {
-                                    "echo '${profile.id}' > /data/data/com.xaozora.manager/files/autd_base_mode; echo '${profile.id}' > /data/data/com.xaozora.manager/files/autd_status"
+                                    "echo '${profile.id}' > ${context.filesDir.path}/autd_base_mode; echo '${profile.id}' > ${context.filesDir.path}/autd_status"
                                 } else {
                                     "/system/bin/${profile.id}"
                                 }
@@ -359,7 +362,8 @@ fun TuningScreen(
             }
 
             item(span = { GridItemSpan(maxLineSpan) }) {
-                Spacer(modifier = Modifier.height(100.dp))
+                Spacer(modifier = Modifier.height(140.dp))
+                Spacer(modifier = Modifier.navigationBarsPadding())
             }
         }
     }

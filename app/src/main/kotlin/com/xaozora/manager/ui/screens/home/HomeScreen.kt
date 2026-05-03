@@ -67,6 +67,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import com.xaozora.manager.core.shell.RootShellHelper
 import com.xaozora.manager.core.utils.SystemInfo
 import com.xaozora.manager.core.utils.SystemInfoUtils
@@ -81,6 +82,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.layout.navigationBarsPadding
 import com.xaozora.manager.R
 import dev.chrisbanes.haze.HazeState
 
@@ -90,6 +92,7 @@ fun HomeScreen(
     hazeState: HazeState,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var systemInfo by remember { mutableStateOf<SystemInfo?>(null) }
     var isDaemonRunning by remember { mutableStateOf(false) }
@@ -108,7 +111,8 @@ fun HomeScreen(
         if (isAutdAvailable) {
             withContext(Dispatchers.IO) {
                 while (true) {
-                    val method = RootShellHelper.readSystemFile("/data/data/com.xaozora.manager/files/autd_awake_method.info").trim()
+                    val infoPath = "${context.filesDir.path}/autd_awake_method.info"
+                    val method = RootShellHelper.readSystemFile(infoPath).trim()
                     daemonMethod = if (method.isNotBlank() && !method.contains("No such file", true) && !method.contains("error", true)) {
                         method
                     } else {
@@ -223,7 +227,8 @@ fun HomeScreen(
             hazeState = hazeState
         )
         
-        Spacer(modifier = Modifier.height(100.dp))
+        Spacer(modifier = Modifier.height(140.dp))
+        Spacer(modifier = Modifier.navigationBarsPadding())
         }
     }
 }

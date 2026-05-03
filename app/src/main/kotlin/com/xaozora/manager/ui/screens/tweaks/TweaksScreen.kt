@@ -55,11 +55,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
+import androidx.compose.foundation.layout.navigationBarsPadding
 import com.xaozora.manager.core.shell.RootShellHelper
 import com.xaozora.manager.ui.components.GlassCard
 import dev.chrisbanes.haze.HazeState
@@ -77,6 +79,7 @@ fun TweaksScreen(
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     var ramTotal by remember { mutableIntStateOf(1) }
@@ -119,7 +122,7 @@ fun TweaksScreen(
         withContext(Dispatchers.IO) {
             isAutdAvailable = RootShellHelper.checkFileExists("/system/bin/autd")
             bypassCharging = RootShellHelper.readSystemFile("/sys/class/power_supply/battery/input_suspend").trim() == "1"
-            optimizeGameThread = RootShellHelper.readSystemFile("/data/data/com.xaozora.manager/files/autd_opt_allow").trim() == "1"
+            optimizeGameThread = RootShellHelper.readSystemFile("${context.filesDir.path}/autd_opt_allow").trim() == "1"
         }
         while (true) {
             fetchRamStats()
@@ -345,7 +348,7 @@ fun TweaksScreen(
                     hazeState = hazeState,
                     onCheckedChange = { newVal ->
                         scope.launch(Dispatchers.IO) {
-                            if (RootShellHelper.writeSystemFile("/data/data/com.xaozora.manager/files/autd_opt_allow", if (newVal) "1" else "0")) {
+                            if (RootShellHelper.writeSystemFile("${context.filesDir.path}/autd_opt_allow", if (newVal) "1" else "0")) {
                                 optimizeGameThread = newVal
                                 scope.launch {
                                     val status = if (newVal) "Enabled" else "Disabled"
@@ -361,7 +364,8 @@ fun TweaksScreen(
                 )
             }
             
-            Spacer(modifier = Modifier.height(100.dp))
+            Spacer(modifier = Modifier.height(140.dp))
+            Spacer(modifier = Modifier.navigationBarsPadding())
         }
     }
 }
