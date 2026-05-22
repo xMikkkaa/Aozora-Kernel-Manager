@@ -29,8 +29,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.Games
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +39,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -88,6 +87,7 @@ fun TweaksScreen(
 
     var bypassCharging by remember { mutableStateOf(false) }
     var optimizeGameThread by remember { mutableStateOf(false) }
+    var idleCharging by remember { mutableStateOf(false) }
     var isAutdAvailable by remember { mutableStateOf(false) }
 
     var showFlushDialog by remember { mutableStateOf(false) }
@@ -123,6 +123,7 @@ fun TweaksScreen(
             isAutdAvailable = RootShellHelper.checkFileExists("/system/bin/autd")
             bypassCharging = RootShellHelper.readSystemFile("/sys/class/power_supply/battery/input_suspend").trim() == "1"
             optimizeGameThread = RootShellHelper.readSystemFile("${context.filesDir.path}/autd_opt_allow").trim() == "1"
+            idleCharging = RootShellHelper.readSystemFile("${context.filesDir.path}/autd_idle_charging").trim() == "1"
         }
         while (true) {
             fetchRamStats()
@@ -362,6 +363,30 @@ fun TweaksScreen(
                         }
                     }
                 )
+                Spacer(modifier = Modifier.height(12.dp))
+                CustomToggleCard(
+                    title = "Idle Charging",
+                    subtitle = "Reduce charging while gaming. (Experimental)",
+                    icon = Icons.Rounded.BatteryChargingFull,
+                    checked = idleCharging,
+                    hazeState = hazeState,
+                    onCheckedChange = { newVal ->
+                        scope.launch(Dispatchers.IO) {
+                            if (RootShellHelper.writeSystemFile("${context.filesDir.path}/autd_idle_charging", if (newVal) "1" else "0")) {
+                                idleCharging = newVal
+                                scope.launch {
+                                    val status = if (newVal) "Enabled" else "Disabled"
+                                    snackbarHostState.showSnackbar("Idle Charging $status")
+                                }
+                            } else {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Failed to toggle Idle Charging")
+                                }
+                            }
+                        }
+                    }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
             }
             
             Spacer(modifier = Modifier.height(140.dp))

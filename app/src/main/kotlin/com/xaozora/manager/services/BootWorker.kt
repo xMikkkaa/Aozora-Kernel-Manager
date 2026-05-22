@@ -74,6 +74,12 @@ class BootWorker(
             .setSmallIcon(android.R.drawable.ic_popup_sync)
             .build()
 
-        return ForegroundInfo(NOTIFICATION_ID, notification)
+        val type = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+        } else {
+            0
+        }
+
+        return ForegroundInfo(NOTIFICATION_ID, notification, type)
     }
 }

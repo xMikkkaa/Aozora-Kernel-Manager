@@ -1,6 +1,8 @@
 package com.xaozora.manager.ui.screens.home
 
 import android.graphics.BlurMaskFilter
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -103,7 +105,11 @@ fun HomeScreen(
         withContext(Dispatchers.IO) {
             systemInfo = SystemInfoUtils.fetchSystemInfo()
             isAutdAvailable = RootShellHelper.checkFileExists("/system/bin/autd")
-            isDaemonRunning = RootShellHelper.executeCmd("pidof autd > /dev/null")
+        }
+        while (true) {
+            val running = withContext(Dispatchers.IO) { RootShellHelper.executeCmd("pidof autd > /dev/null") }
+            isDaemonRunning = running
+            delay(3000)
         }
     }
 
@@ -150,12 +156,15 @@ fun HomeScreen(
                 isRunning = isDaemonRunning,
                 hazeState = hazeState,
                 onClick = {
+                    val targetState = !isDaemonRunning
+                    isDaemonRunning = targetState
                     scope.launch(Dispatchers.IO) {
-                        if (isDaemonRunning) {
-                            RootShellHelper.executeCmd("killall autd")
-                        } else {
+                        if (targetState) {
                             RootShellHelper.executeCmd("/system/bin/autd > /dev/null 2>&1 &")
+                        } else {
+                            RootShellHelper.executeCmd("killall autd")
                         }
+                        delay(500)
                         isDaemonRunning = RootShellHelper.executeCmd("pidof autd > /dev/null")
                     }
                 }
@@ -338,77 +347,76 @@ private fun HeroCard(deviceModel: String) {
 @Composable
 private fun DaemonServiceCard(isRunning: Boolean, hazeState: HazeState, onClick: () -> Unit) {
     val colorScheme = MaterialTheme.colorScheme
-    
+    val bgColor by animateColorAsState(if (isRunning) colorScheme.primaryContainer.copy(alpha = 0.25f) else colorScheme.surfaceContainer, label = "bg")
+    val borderColor by animateColorAsState(if (isRunning) colorScheme.primary.copy(alpha = 0.4f) else colorScheme.outlineVariant.copy(alpha = 0.5f), label = "border")
+    val iconBgColor by animateColorAsState(if (isRunning) colorScheme.primary.copy(alpha = 0.2f) else colorScheme.surfaceContainerHighest.copy(alpha = 0.5f), label = "iconBg")
+    val iconColor by animateColorAsState(if (isRunning) colorScheme.primary else colorScheme.secondary, label = "iconColor")
+
+    val switchOffset by animateDpAsState(if (isRunning) 24.dp else 0.dp, label = "switchOffset")
+    val switchBg by animateColorAsState(if (isRunning) colorScheme.primary else colorScheme.surfaceContainerHighest, label = "switchBg")
+    val thumbColor by animateColorAsState(if (isRunning) colorScheme.onPrimary else colorScheme.outline, label = "thumbColor")
+
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .border(1.2.dp, borderColor, RoundedCornerShape(24.dp)),
         hazeState = hazeState,
         shape = RoundedCornerShape(24.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(if (isRunning) colorScheme.primaryContainer.copy(alpha = 0.25f) else Color.Transparent)
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(
-                        color = if (isRunning) colorScheme.primary.copy(alpha = 0.2f) else colorScheme.error.copy(alpha = 0.2f),
-                        shape = CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (isRunning) Icons.Rounded.Memory else Icons.Rounded.PowerOff,
-                    contentDescription = null,
-                    tint = if (isRunning) colorScheme.primary else colorScheme.error,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-            
-            Spacer(modifier = Modifier.width(16.dp))
-            
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Daemon Service",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = if (isRunning) colorScheme.onPrimaryContainer else colorScheme.onSurface
-                    )
-                )
-                Text(
-                    text = if (isRunning) "Running (autd)" else "Stopped",
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        color = if (isRunning) colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else colorScheme.onSurfaceVariant
-                    )
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .size(width = 52.dp, height = 28.dp)
-                    .background(
-                        color = if (isRunning) colorScheme.primary else colorScheme.surfaceContainerHighest,
-                        shape = CircleShape
-                    )
-                    .border(
-                        width = 1.dp,
-                        color = if (isRunning) colorScheme.primary else colorScheme.outlineVariant.copy(alpha = 0.5f),
-                        shape = CircleShape
-                    )
-                    .padding(4.dp),
-                contentAlignment = if (isRunning) Alignment.CenterEnd else Alignment.CenterStart
-            ) {
+        Box(modifier = Modifier.fillMaxWidth().background(if (isRunning) bgColor else Color.Transparent).padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(20.dp)
-                        .background(if (isRunning) colorScheme.onPrimary else colorScheme.outline, CircleShape)
-                )
+                        .background(iconBgColor, CircleShape)
+                        .padding(12.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isRunning) Icons.Rounded.Memory else Icons.Rounded.PowerOff,
+                        contentDescription = null,
+                        tint = iconColor,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Daemon Service",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = if (isRunning) colorScheme.onPrimaryContainer else colorScheme.onSurface
+                        )
+                    )
+                    Text(
+                        text = if (isRunning) "Running (autd)" else "Stopped",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = if (isRunning) colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else colorScheme.onSurfaceVariant
+                        )
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(width = 52.dp, height = 28.dp)
+                        .background(color = switchBg, shape = CircleShape)
+                        .border(
+                            width = 1.dp,
+                            color = if (isRunning) colorScheme.primary else colorScheme.outlineVariant.copy(alpha = 0.5f),
+                            shape = CircleShape
+                        )
+                        .padding(4.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .offset(x = switchOffset)
+                            .size(20.dp)
+                            .background(thumbColor, CircleShape)
+                    )
+                }
             }
         }
     }

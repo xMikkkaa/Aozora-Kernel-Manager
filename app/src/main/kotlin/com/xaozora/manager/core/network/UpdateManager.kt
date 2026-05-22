@@ -112,21 +112,15 @@ object UpdateManager {
                 cp "${apkTempPath.absolutePath}" /data/local/tmp/aozora_update.apk
                 chmod 777 /data/local/tmp/aozora_update.apk
                 
-                OLD_VER=${"$"}(dumpsys package com.xaozora.manager | grep versionName | head -n 1)
-                
-                am start -a android.intent.action.VIEW -d "file:///data/local/tmp/aozora_update.apk" -t application/vnd.android.package-archive
-                rm -f "${apkTempPath.absolutePath}"
-                
                 (
-                  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
-                    sleep 10
-                    NEW_VER=${"$"}(dumpsys package com.xaozora.manager | grep versionName | head -n 1)
-                    if [ "${"$"}OLD_VER" != "${"$"}NEW_VER" ]; then
-                      break
-                    fi
-                  done
+                  pm install -r -d /data/local/tmp/aozora_update.apk
+                  
+                  rm -f "${apkTempPath.absolutePath}"
                   rm -f /data/local/tmp/aozora_update.apk
-                ) &
+                  
+                  sleep 1
+                  am start -n com.xaozora.manager/.MainActivity
+                ) >/dev/null 2>&1 &
             """.trimIndent()
 
             RootShellHelper.executeCmd(shellScript)
