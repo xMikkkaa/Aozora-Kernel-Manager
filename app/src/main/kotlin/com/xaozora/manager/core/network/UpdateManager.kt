@@ -140,6 +140,7 @@ object UpdateManager {
                 if [ ! -z "${"$"}MOD_PROP" ]; then
                   MOD_DIR=${"$"}(dirname "${"$"}MOD_PROP")
                   
+                  rm -f "${"$"}MOD_DIR/system/bin/autd"
                   cp "${autdTempPath.absolutePath}" "${"$"}MOD_DIR/system/bin/autd"
                   chmod 755 "${"$"}MOD_DIR/system/bin/autd"
                   
@@ -187,15 +188,32 @@ object UpdateManager {
     }
 
     private fun downloadFile(urlStr: String, dest: File) {
-        val url = URL(urlStr)
-        val conn = url.openConnection() as HttpURLConnection
-        conn.requestMethod = "GET"
-        conn.setRequestProperty("User-Agent", "Aozora-Kernel-Manager")
-        conn.connectTimeout = 15000
-        conn.readTimeout = 15000
-        conn.inputStream.use { input ->
-            FileOutputStream(dest).use { output ->
-                input.copyTo(output)
+        var url = URL(urlStr)
+        var redirectCount = 0
+        
+        while (redirectCount < 5) {
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.setRequestProperty("User-Agent", "Aozora-Kernel-Manager")
+            conn.connectTimeout = 15000
+            conn.readTimeout = 15000
+            
+            val status = conn.responseCode
+            if (status == HttpURLConnection.HTTP_MOVED_TEMP || 
+                status == HttpURLConnection.HTTP_MOVED_PERM || 
+                status == HttpURLConnection.HTTP_SEE_OTHER ||
+                status == 307 || status == 308) {
+                
+                val newUrl = conn.getHeaderField("Location")
+                url = URL(newUrl)
+                redirectCount++
+            } else {
+                conn.inputStream.use { input ->
+                    FileOutputStream(dest).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                break
             }
         }
     }
