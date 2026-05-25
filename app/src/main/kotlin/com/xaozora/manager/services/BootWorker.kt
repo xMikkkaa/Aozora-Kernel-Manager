@@ -19,7 +19,7 @@ class BootWorker(
 
     companion object {
         private const val NOTIFICATION_ID = 999
-        private const val CHANNEL_ID = "xAozoraBoot"
+        private const val CHANNEL_ID = "xAozoraBootV2"
         private const val TAG = "BootWorker"
     }
 
@@ -64,7 +64,9 @@ class BootWorker(
 
     private fun createForegroundInfo(): ForegroundInfo {
         val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val channel = NotificationChannel(CHANNEL_ID, "Aozora Boot", NotificationManager.IMPORTANCE_LOW)
+        val channel = NotificationChannel(CHANNEL_ID, "Aozora Boot", NotificationManager.IMPORTANCE_LOW).apply {
+            setShowBadge(false)
+        }
         nm.createNotificationChannel(channel)
 
         val builder = Notification.Builder(appContext, CHANNEL_ID)
