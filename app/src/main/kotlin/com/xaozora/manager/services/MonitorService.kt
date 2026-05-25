@@ -35,8 +35,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 class MonitorService : Service() {
 
@@ -48,7 +46,6 @@ class MonitorService : Service() {
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val daemonMutex = Mutex()
 
     private var powerObserver: ContentObserver? = null
 
@@ -75,13 +72,6 @@ class MonitorService : Service() {
 
         serviceScope.launch {
             try {
-                val daemonPath = "${filesDir.path}/xaozora_daemon"
-                val exists = RootShellHelper.checkFileExists(daemonPath)
-                if (!exists) {
-                    Log.w(TAG, "Daemon not found at $daemonPath, notifying user")
-                    showNoDaemonNotification()
-                }
-
                 val filter = IntentFilter().apply {
                     addAction(Intent.ACTION_SCREEN_ON)
                     addAction(Intent.ACTION_USER_PRESENT)
@@ -102,7 +92,6 @@ class MonitorService : Service() {
                 }
                 contentResolver.registerContentObserver(uri, false, powerObserver!!)
 
-                checkAndStartDaemon()
                 updatePowerSaveState()
 
                 val prefs = getSharedPreferences("aozora_prefs", Context.MODE_PRIVATE)
@@ -183,19 +172,10 @@ class MonitorService : Service() {
 
     private fun checkAndStartDaemon() {
         serviceScope.launch {
-            daemonMutex.withLock {
-                if (com.xaozora.manager.core.utils.NativeDaemonManager.isDaemonRunning()) {
-                    Log.d(TAG, "Daemon is already running, skipping startup")
-                    return@withLock
-                }
-                
-                try {
-                    Log.d(TAG, "Starting daemon via NativeDaemonManager")
-                    com.xaozora.manager.core.utils.NativeDaemonManager.extractAndStartDaemon(this@MonitorService)
-                    
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to start daemon", e)
-                }
+            try {
+                com.xaozora.manager.core.utils.NativeDaemonManager.extractAndStartDaemon(this@MonitorService)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to check/start daemon", e)
             }
         }
     }

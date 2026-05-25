@@ -34,14 +34,16 @@ class BootWorker(
         delay(3000L)
 
         try {
-            if (RootShellHelper.checkFileExists("/system/bin/autd")) {
-                Log.d(TAG, "autd found, starting MonitorService")
+            val prefs = appContext.getSharedPreferences("aozora_prefs", Context.MODE_PRIVATE)
+            val isMonitorEnabled = prefs.getBoolean("battery_monitor_service", true)
+            val isAutdEnabled = prefs.getBoolean("autd_enabled", true)
+            
+            if (isMonitorEnabled || isAutdEnabled) {
+                Log.d(TAG, "Starting MonitorService on boot")
                 val serviceIntent = Intent(appContext, MonitorService::class.java)
                 appContext.startForegroundService(serviceIntent)
             } else {
-                Log.w(TAG, "autd not found during boot, stopping")
-                updateNotificationNoAutd()
-                delay(5000L)
+                Log.d(TAG, "Service and AUTD disabled, not starting")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error in BootWorker", e)

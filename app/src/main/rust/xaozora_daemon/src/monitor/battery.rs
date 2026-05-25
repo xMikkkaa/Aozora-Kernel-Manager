@@ -421,7 +421,7 @@ pub fn fetch_and_parse_stats() -> AdvancedBatteryStats {
         stats.deep_sleep_ms = stats.time_on_battery_realtime_ms.saturating_sub(stats.time_on_battery_uptime_ms);
         stats.awake_screen_off_ms = stats.time_on_battery_uptime_ms.saturating_sub(stats.screen_on_duration_ms);
         
-]        let design_capacity = if stats.last_learned_capacity_mah > 0.0 { stats.last_learned_capacity_mah } else { 4000.0 };
+        let design_capacity = if stats.last_learned_capacity_mah > 0.0 { stats.last_learned_capacity_mah } else { 4000.0 };
         
         let screen_on_hrs = stats.screen_on_duration_ms as f64 / 3_600_000.0;
         if screen_on_hrs > 0.0 {
