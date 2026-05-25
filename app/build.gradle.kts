@@ -34,7 +34,7 @@ android {
         //noinspection OldTargetApi
         targetSdk = 36
         versionCode = 2
-        versionName = "2.2.1"
+        versionName = "2.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -59,9 +59,77 @@ android {
     }
 }
 
+
+val rustProjectDir = file("src/main/rust/xaozora_daemon")
+val rustOutputBinary = file("src/main/rust/xaozora_daemon/target/aarch64-linux-android/release/xaozora_daemon")
+val assetsOutputDir = file("src/main/assets")
+
+val ndkDir: String by lazy {
+    val envNdk = System.getenv("ANDROID_NDK_HOME")
+    if (!envNdk.isNullOrBlank() && File(envNdk).exists()) return@lazy envNdk
+
+    val localProps = rootProject.file("local.properties")
+    if (localProps.exists()) {
+        val props = Properties()
+        props.load(FileInputStream(localProps))
+
+        val ndkFromLocal = props.getProperty("ndk.dir")
+        if (!ndkFromLocal.isNullOrBlank() && File(ndkFromLocal).exists()) return@lazy ndkFromLocal
+
+        val sdkFromLocal = props.getProperty("sdk.dir")
+        if (!sdkFromLocal.isNullOrBlank()) {
+            val ndkBase = File(sdkFromLocal, "ndk")
+            if (ndkBase.exists()) {
+                val latest = ndkBase.listFiles()
+                    ?.filter { f -> f.isDirectory }
+                    ?.maxByOrNull { f -> f.name }
+                if (latest != null) return@lazy latest.absolutePath
+            }
+        }
+    }
+
+    error("Cannot find Android NDK. Set ANDROID_NDK_HOME, or add ndk.dir to local.properties.")
+}
+
+tasks.register<Exec>("buildRustDaemon") {
+    group = "rust"
+    description = "Compiles the Rust xaozora_daemon for aarch64-linux-android"
+
+    workingDir = rustProjectDir
+    environment("ANDROID_NDK_HOME", ndkDir)
+
+    commandLine("cargo", "ndk", "-t", "arm64-v8a", "build", "--release")
+
+    inputs.dir(rustProjectDir.resolve("src"))
+    inputs.file(rustProjectDir.resolve("Cargo.toml"))
+    inputs.file(rustProjectDir.resolve("Cargo.lock"))
+    outputs.file(rustOutputBinary)
+}
+
+tasks.register<Copy>("copyRustDaemonToAssets") {
+    group = "rust"
+    description = "Copies the compiled Rust daemon binary to the Android assets folder"
+    dependsOn("buildRustDaemon")
+
+    from(rustOutputBinary)
+    into(assetsOutputDir)
+}
+
+afterEvaluate {
+    tasks.matching { 
+        it.name.matches(Regex("merge(Debug|Release)Assets")) ||
+        it.name.matches(Regex("lintVitalAnalyze(Debug|Release)")) ||
+        it.name.matches(Regex("generate(Debug|Release)LintVitalReportModel"))
+    }.configureEach {
+        dependsOn("copyRustDaemonToAssets")
+    }
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
+    implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation("com.google.code.gson:gson:2.10.1")
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)

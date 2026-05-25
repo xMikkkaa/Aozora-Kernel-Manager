@@ -1,11 +1,13 @@
 package com.xaozora.manager
 
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Build
 import android.os.Bundle
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -24,6 +26,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -43,6 +46,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import android.util.Log
 import android.content.Context
+import java.io.File
+import java.io.FileOutputStream
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.xaozora.manager.core.shell.RootShellHelper
 import com.xaozora.manager.core.network.UpdateManager
 import com.xaozora.manager.core.network.UpdateCheckResult
@@ -67,9 +73,22 @@ import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splashScreen = installSplashScreen()
+        
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        WindowCompat.setDecorFitsSystemWindows(window, false)
+        
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isStatusBarContrastEnforced = false
+            window.isNavigationBarContrastEnforced = false
+        }
+        
+        splashScreen.setOnExitAnimationListener { it.remove() }
+
+        val navigateToTuning = intent?.action == "android.service.quicksettings.action.QS_TILE_PREFERENCES"
 
         val themeManager = ThemeManager(this)
 
@@ -111,18 +130,40 @@ class MainActivity : ComponentActivity() {
                 AppThemeMode.AUTO -> isSystemDark
             }
 
+            val mainScope = rememberCoroutineScope()
+            DisposableEffect(context) {
+                val prefs = context.getSharedPreferences("aozora_prefs", Context.MODE_PRIVATE)
+                val listener = SharedPreferences.OnSharedPreferenceChangeListener { sharedPreferences, key ->
+                    if (key == "autd_enabled") {
+                        mainScope.launch(Dispatchers.IO) {
+                            val autdExists = RootShellHelper.checkFileExists("${context.filesDir.path}/xaozora_daemon")
+                            isAutdAvailable = autdExists && sharedPreferences.getBoolean("autd_enabled", true)
+                        }
+                    }
+                }
+                prefs.registerOnSharedPreferenceChangeListener(listener)
+                onDispose {
+                    prefs.unregisterOnSharedPreferenceChangeListener(listener)
+                }
+            }
+
             androidx.compose.runtime.LaunchedEffect(Unit) {
                 withContext(Dispatchers.IO) {
                     val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
                     appVersion = packageInfo.versionName ?: ""
                     
-                    isAutdAvailable = RootShellHelper.checkFileExists("/system/bin/autd")
+                    val prefs = context.getSharedPreferences("aozora_prefs", Context.MODE_PRIVATE)
+                    
+                    com.xaozora.manager.core.utils.NativeDaemonManager.extractAndStartDaemon(context)
+
+                    isAutdAvailable = RootShellHelper.checkFileExists("${context.filesDir.path}/xaozora_daemon") && prefs.getBoolean("autd_enabled", true)
+                    
                     val propOutput = RootShellHelper.executeCmdAndGetOutput(
                         "grep -l 'id=.*aozora' /data/adb/modules/*/module.prop 2>/dev/null"
                     )
                     isModuleInstalled = propOutput.isNotBlank()
 
-                    if (isAutdAvailable && !MonitorService.isServiceRunning) {
+                    if (!MonitorService.isServiceRunning) {
                         try {
                             Log.d("MainActivity", "Starting MonitorService...")
                             val serviceIntent = Intent(this@MainActivity, MonitorService::class.java)
@@ -132,11 +173,10 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    val prefs = context.getSharedPreferences("aozora_prefs", Context.MODE_PRIVATE)
                     if (prefs.getBoolean("auto_check_updates", true)) {
                         try {
                             val result = UpdateManager.checkUpdates(appVersion)
-                            if (result.appUpdate.hasUpdate || result.autdUpdate.hasUpdate) {
+                            if (result.appUpdate.hasUpdate) {
                                 withContext(Dispatchers.Main) {
                                     updateCheckResult = result
                                     showUpdateDialog = true
@@ -151,12 +191,30 @@ class MainActivity : ComponentActivity() {
 
             CompositionLocalProvider(LocalThemeManager provides themeManager) {
                 AozoraKernelManagerTheme(darkTheme = isDark, dynamicColor = true) {
+                    var showSplash by remember { mutableStateOf(!navigateToTuning) }
+
+                    if (showSplash) {
+                        com.xaozora.manager.ui.components.SplashScreen(
+                            onSplashFinished = { showSplash = false }
+                        )
+                    } else {
                     val screens = getAvailableScreens(isAutdAvailable, isModuleInstalled)
                     val pagerState = rememberPagerState(pageCount = { screens.size })
                     val coroutineScope = rememberCoroutineScope()
+
+                    if (navigateToTuning) {
+                        LaunchedEffect(screens) {
+                            val tuningIndex = screens.indexOfFirst { it is Screen.Tuning }
+                            if (tuningIndex >= 0) {
+                                pagerState.scrollToPage(tuningIndex)
+                            }
+                        }
+                    }
                     val hazeState = remember { HazeState() }
+                    val batteryHazeState = remember { HazeState() }
                     val snackbarHostState = remember { SnackbarHostState() }
                     var onAddClickAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+                    var showBatteryScreen by remember { mutableStateOf(false) }
 
                     Box(
                         modifier = Modifier.fillMaxSize()
@@ -224,7 +282,9 @@ class MainActivity : ComponentActivity() {
                                 pagerState = pagerState,
                                 hazeState = hazeState,
                                 snackbarHostState = snackbarHostState,
+                                isAutdAvailable = isAutdAvailable,
                                 onAddClick = { action -> onAddClickAction = action },
+                                onNavigateToBattery = { showBatteryScreen = true },
                                 modifier = Modifier
                                     .hazeSource(state = hazeState)
                                     .padding(bottom = innerPadding.calculateBottomPadding())
@@ -239,7 +299,9 @@ class MainActivity : ComponentActivity() {
                                 screens = screens,
                                 selectedIndex = pagerState.currentPage,
                                 onItemSelected = { index ->
-                                    coroutineScope.launch { pagerState.animateScrollToPage(index) }
+                                    coroutineScope.launch { 
+                                        pagerState.scrollToPage(index)
+                                    }
                                 },
                                 isVisible = true,
                                 hazeState = hazeState,
@@ -248,26 +310,28 @@ class MainActivity : ComponentActivity() {
                                 } else null
                             )
                         }
+
+                        if (showBatteryScreen) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .hazeSource(state = batteryHazeState)
+                            ) {
+                                com.xaozora.manager.ui.screens.battery.BatteryScreen(
+                                    hazeState = batteryHazeState,
+                                    onBack = { showBatteryScreen = false }
+                                )
+                            }
+                        }
                     }
 
                     if (showUpdateDialog && updateCheckResult != null) {
                         val result = updateCheckResult!!
                         val isAppUpdate = result.appUpdate.hasUpdate
-                        val isAutdUpdate = result.autdUpdate.hasUpdate
 
-                        val newVersionDisplay = buildString {
-                            if (isAppUpdate) append("App: v${result.appUpdate.newVersion} ")
-                            if (isAutdUpdate) append("AUTD: v${result.autdUpdate.newVersion}")
-                        }.trim()
+                        val newVersionDisplay = "App: v${result.appUpdate.newVersion}"
 
-                        val changelogDisplay = buildString {
-                            if (isAppUpdate) {
-                                append("App Update Notes:\n${result.appUpdate.releaseNotes}\n\n")
-                            }
-                            if (isAutdUpdate) {
-                                append("Daemon Update Notes:\n${result.autdUpdate.releaseNotes}")
-                            }
-                        }.trim()
+                        val changelogDisplay = "App Update Notes:\n${result.appUpdate.releaseNotes}\n\n"
 
                         UpdateDialog(
                             hazeState = hazeState,
@@ -282,32 +346,15 @@ class MainActivity : ComponentActivity() {
 
                                     if (isAppUpdate) {
                                         UpdateManager.performAppUpdate(result.appUpdate.downloadUrl, context.cacheDir)
-                                    } else if (isAutdUpdate) {
-                                        val success = UpdateManager.performAutdUpdate(
-                                            result.autdUpdate.downloadUrl,
-                                            context.cacheDir,
-                                            result.autdUpdate.newVersion
-                                        )
-                                        if (success) {
-                                            snackbarHostState.showSnackbar(
-                                                message = "AUTD updated to v${result.autdUpdate.newVersion}. Please reboot to apply changes.",
-                                                actionLabel = "Reboot",
-                                                duration = androidx.compose.material3.SnackbarDuration.Long
-                                            ).let { snackbarResult ->
-                                                if (snackbarResult == androidx.compose.material3.SnackbarResult.ActionPerformed) {
-                                                    RootShellHelper.executeCmd("reboot")
-                                                }
-                                            }
-                                        } else {
-                                            snackbarHostState.showSnackbar("AUTD update failed.")
-                                        }
                                     }
                                 }
                             }
                         )
+                    }
                     }
                 }
             }
         }
     }
 }
+

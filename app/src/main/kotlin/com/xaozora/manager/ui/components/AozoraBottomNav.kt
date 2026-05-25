@@ -25,9 +25,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.rounded.Add
@@ -37,12 +36,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -62,10 +66,9 @@ fun AozoraBottomNav(
     modifier: Modifier = Modifier,
     onAddClick: (() -> Unit)? = null,
 ) {
-    val lazyListState = rememberLazyListState()
     val density = LocalDensity.current
 
-    val primaryScreens = remember(screens) { screens.filter { it != Screen.About } }
+    val primaryScreens = remember(screens) { screens.filter { it != Screen.Settings } }
 
     val surfaceContainer = MaterialTheme.colorScheme.surfaceContainer
     val strongBlurStyle = remember(surfaceContainer) {
@@ -74,27 +77,6 @@ fun AozoraBottomNav(
             noiseFactor = 0.1f,
             tints = listOf(HazeTint(surfaceContainer.copy(alpha = 0.25f)))
         )
-    }
-
-    LaunchedEffect(selectedIndex) {
-        val primaryIndex = selectedIndex.takeIf { it < primaryScreens.size } ?: -1
-        
-        if (primaryIndex != -1) {
-            val isLastItem = primaryIndex == primaryScreens.size - 1
-            
-            if (isLastItem) {
-                lazyListState.animateScrollToItem(primaryIndex, scrollOffset = 0)
-            } else {
-                val viewportWidth = lazyListState.layoutInfo.viewportSize.width
-                val centerOffset = if (viewportWidth > 0) {
-                    val itemWidth = with(density) { 120.dp.roundToPx() }
-                    (viewportWidth - itemWidth) / 2
-                } else {
-                    with(density) { 90.dp.roundToPx() }
-                }
-                lazyListState.animateScrollToItem(primaryIndex, scrollOffset = -centerOffset)
-            }
-        }
     }
 
     Box(
@@ -159,20 +141,55 @@ fun AozoraBottomNav(
                     modifier = Modifier.fillMaxSize(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    LazyRow(
-                        state = lazyListState,
+                    val scrollState = rememberScrollState()
+                    val itemOffsets = remember { mutableStateMapOf<Int, Int>() }
+                    val itemWidths = remember { mutableStateMapOf<Int, Int>() }
+                    var rowWidth by remember { mutableIntStateOf(0) }
+
+                    LaunchedEffect(selectedIndex) {
+                        kotlinx.coroutines.delay(200)
+
+                        val offset = itemOffsets[selectedIndex] ?: return@LaunchedEffect
+                        val width = itemWidths[selectedIndex] ?: return@LaunchedEffect
+                        if (rowWidth <= 0) return@LaunchedEffect
+
+                        val itemCenter = offset + width / 2
+                        val targetScroll = (itemCenter - rowWidth / 2).coerceIn(0, scrollState.maxValue)
+                        scrollState.animateScrollTo(
+                            targetScroll,
+                            animationSpec = tween(durationMillis = 300, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                        )
+                    }
+
+                    Row(
                         modifier = Modifier
                             .weight(1f)
-                            .padding(horizontal = 8.dp),
+                            .padding(horizontal = 8.dp)
+                            .onGloballyPositioned { coordinates ->
+                                rowWidth = coordinates.size.width
+                            }
+                            .horizontalScroll(scrollState),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        itemsIndexed(primaryScreens) { index, screen ->
-                            NavItem(
-                                screen = screen,
-                                isSelected = selectedIndex == index,
-                                onClick = { onItemSelected(index) }
-                            )
+                        primaryScreens.forEachIndexed { index, screen ->
+                            Box(
+                                modifier = Modifier.onGloballyPositioned { coordinates ->
+                                    itemOffsets[index] = coordinates.size.width.let {
+                                        coordinates.parentLayoutCoordinates?.let { parent ->
+                                            val pos = parent.localPositionOf(coordinates, Offset.Zero)
+                                            pos.x.toInt()
+                                        } ?: 0
+                                    }
+                                    itemWidths[index] = coordinates.size.width
+                                }
+                            ) {
+                                NavItem(
+                                    screen = screen,
+                                    isSelected = selectedIndex == index,
+                                    onClick = { onItemSelected(index) }
+                                )
+                            }
                         }
                     }
 
@@ -188,9 +205,9 @@ fun AozoraBottomNav(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         NavItem(
-                            screen = Screen.About,
-                            isSelected = selectedIndex == screens.indexOf(Screen.About),
-                            onClick = { onItemSelected(screens.indexOf(Screen.About)) }
+                            screen = Screen.Settings,
+                            isSelected = selectedIndex == screens.indexOf(Screen.Settings),
+                            onClick = { onItemSelected(screens.indexOf(Screen.Settings)) }
                         )
                     }
                 }
@@ -259,7 +276,7 @@ private fun NavItem(
             contentDescription = screen.title,
             tint = contentColor
         )
-        AnimatedVisibility(
+        androidx.compose.animation.AnimatedVisibility(
             visible = isSelected,
             enter = fadeIn(animationSpec = fastSpec),
             exit = fadeOut(animationSpec = fastSpec)

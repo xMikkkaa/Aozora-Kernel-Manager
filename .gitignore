@@ -18,3 +18,4 @@ INSTRUCTIONS.md
 .artifacts/
 autd_reference/
 flutter_reference/
+app/src/main/rust/xaozora_daemon/target

@@ -17,18 +17,19 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import com.xaozora.manager.ui.screens.home.HomeScreen
 import com.xaozora.manager.ui.screens.tuning.TuningScreen
 import com.xaozora.manager.ui.screens.tweaks.TweaksScreen
-import com.xaozora.manager.ui.screens.customhelper.CustomHelperScreen
 import com.xaozora.manager.ui.screens.appmanager.AppManagerScreen
 import com.xaozora.manager.ui.screens.about.AboutScreen
+import com.xaozora.manager.ui.screens.settings.SettingsScreen
+import androidx.compose.material.icons.outlined.Settings
 import dev.chrisbanes.haze.HazeState
 
 sealed class Screen(val title: String, val icon: ImageVector) {
     data object Home : Screen("Home", Icons.Rounded.Home)
     data object Tuning : Screen("Tuning", Icons.Rounded.Tune)
     data object Tweaks : Screen("Tweaks", Icons.Outlined.Build)
-    data object CustomHelper : Screen("Helper", Icons.Rounded.Extension)
     data object AppManager : Screen("Apps", Icons.Rounded.Apps)
     data object About : Screen("About", Icons.Outlined.Info)
+    data object Settings : Screen("Settings", Icons.Outlined.Settings)
 }
 
 @Composable
@@ -38,9 +39,8 @@ fun getAvailableScreens(isAutdAvailable: Boolean, isModuleInstalled: Boolean): L
             add(Screen.Home)
             if (isModuleInstalled) add(Screen.Tuning)
             add(Screen.Tweaks)
-            add(Screen.CustomHelper)
             if (isAutdAvailable) add(Screen.AppManager)
-            add(Screen.About)
+            add(Screen.Settings)
         }
     }
 }
@@ -51,25 +51,32 @@ fun AozoraNavGraph(
     pagerState: PagerState,
     hazeState: HazeState,
     snackbarHostState: SnackbarHostState,
+    isAutdAvailable: Boolean,
     modifier: Modifier = Modifier,
-    onAddClick: (() -> Unit) -> Unit = {}
+    onAddClick: (() -> Unit) -> Unit = {},
+    onNavigateToBattery: () -> Unit = {}
 ) {
     HorizontalPager(
         state = pagerState,
+        key = { screens.getOrNull(it)?.title ?: it.toString() },
         modifier = modifier
     ) { page ->
         when (screens.getOrNull(page)) {
-            Screen.Home -> HomeScreen(hazeState = hazeState)
+            Screen.Home -> HomeScreen(hazeState = hazeState, onNavigateToBattery = onNavigateToBattery)
             Screen.Tuning -> TuningScreen(hazeState = hazeState, snackbarHostState = snackbarHostState)
-            Screen.Tweaks -> TweaksScreen(hazeState = hazeState, snackbarHostState = snackbarHostState)
-            Screen.CustomHelper -> CustomHelperScreen(hazeState = hazeState, snackbarHostState = snackbarHostState)
+            Screen.Tweaks -> TweaksScreen(
+                hazeState = hazeState, 
+                snackbarHostState = snackbarHostState,
+                isAutdAvailable = isAutdAvailable
+            )
             Screen.AppManager -> AppManagerScreen(
                 hazeState = hazeState, 
                 snackbarHostState = snackbarHostState,
                 onAddClickProvider = onAddClick
             )
+            Screen.Settings -> SettingsScreen(hazeState = hazeState, snackbarHostState = snackbarHostState)
             Screen.About -> AboutScreen(hazeState = hazeState, snackbarHostState = snackbarHostState)
-            else -> HomeScreen(hazeState = hazeState)
+            else -> HomeScreen(hazeState = hazeState, onNavigateToBattery = onNavigateToBattery)
         }
     }
 }
