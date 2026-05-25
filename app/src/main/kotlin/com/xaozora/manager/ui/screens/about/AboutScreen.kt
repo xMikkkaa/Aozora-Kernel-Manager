@@ -74,6 +74,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.res.painterResource
+import com.xaozora.manager.R
 import com.xaozora.manager.core.shell.RootShellHelper
 import com.xaozora.manager.core.network.UpdateManager
 import com.xaozora.manager.core.network.UpdateCheckResult
@@ -174,6 +177,7 @@ fun AboutScreen(
             name = "Kaiyaa77",
             role = "Kernel Developer",
             description = "Creator and Maintainer of Aozora Kernel.",
+            imageRes = R.drawable.kai,
             actionIcon = Icons.AutoMirrored.Rounded.Send,
             actionLabel = "View Telegram Profile",
             onActionClick = { launchUrl("https://t.me/Yuu507") },
@@ -199,6 +203,7 @@ fun AboutScreen(
             name = "Aris",
             role = "Lead Tester",
             description = "Lead tester ensuring system stability.",
+            imageUrl = "https://avatars.githubusercontent.com/Risuue",
             actionIcon = Icons.AutoMirrored.Rounded.Send,
             actionLabel = "View Telegram Profile",
             onActionClick = { launchUrl("https://t.me/Aris0103") },
@@ -325,6 +330,7 @@ private fun ProfileCard(
     role: String,
     description: String,
     imageUrl: String? = null,
+    imageRes: Int? = null,
     actionIcon: ImageVector,
     actionLabel: String,
     onActionClick: () -> Unit,
@@ -395,7 +401,15 @@ private fun ProfileCard(
                         .background(colorScheme.surfaceContainerHighest, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (profileImage != null) {
+                    if (imageRes != null) {
+                        Image(
+                            painter = painterResource(id = imageRes),
+                            contentDescription = "Profile Picture",
+                            modifier = Modifier.fillMaxSize().padding(16.dp).clip(CircleShape),
+                            contentScale = ContentScale.Fit,
+                            colorFilter = ColorFilter.tint(colorScheme.primary)
+                        )
+                    } else if (profileImage != null) {
                         Image(
                             bitmap = profileImage,
                             contentDescription = "Profile Picture",
