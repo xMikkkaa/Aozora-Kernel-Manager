@@ -10,6 +10,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,7 +24,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.offset
@@ -36,20 +39,30 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AdminPanelSettings
 import androidx.compose.material.icons.rounded.Android
 import androidx.compose.material.icons.rounded.BatteryChargingFull
+import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.Thermostat
+import androidx.compose.material.icons.rounded.BatteryFull
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.PowerOff
 import androidx.compose.material.icons.rounded.Screenshot
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Sensors
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SettingsSystemDaydream
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ElevatedButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,6 +73,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
@@ -89,10 +108,12 @@ import com.xaozora.manager.R
 import dev.chrisbanes.haze.HazeState
 
 
+
 @Composable
 fun HomeScreen(
     hazeState: HazeState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onNavigateToBattery: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -101,24 +122,50 @@ fun HomeScreen(
     var isAutdAvailable by remember { mutableStateOf(false) }
     var daemonMethod by remember { mutableStateOf("Checking Daemon...") }
 
+    var cpuLoad by remember { mutableStateOf(0.45f) }
+    var gpuFreq by remember { mutableStateOf("400 MHz") }
+    var gpuLoad by remember { mutableStateOf(0.2f) }
+    var ramUsed by remember { mutableStateOf("4.2 GB") }
+    var ramTotal by remember { mutableStateOf("8.0 GB") }
+    var swapUsed by remember { mutableStateOf("1.1 GB") }
+    var swapTotal by remember { mutableStateOf("2.0 GB") }
+    var ramProgress by remember { mutableStateOf(0f) }
+    var swapProgress by remember { mutableStateOf(0f) }
+    
+    var coreFreqs by remember { mutableStateOf(List(8) { "0 MHz" }) }
+    var coreProgress by remember { mutableStateOf(List(8) { 0f }) }
+    
+    var batteryLevel by remember { mutableStateOf(85) }
+    var batteryCurrent by remember { mutableStateOf("-272mA") }
+    var batteryTemp by remember { mutableStateOf("33.3°C") }
+
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
+
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             systemInfo = SystemInfoUtils.fetchSystemInfo()
-            isAutdAvailable = RootShellHelper.checkFileExists("/system/bin/autd")
+            isAutdAvailable = RootShellHelper.checkFileExists("${context.filesDir.path}/xaozora_daemon")
         }
-        while (true) {
-            val running = withContext(Dispatchers.IO) { RootShellHelper.executeCmd("pidof autd > /dev/null") }
-            isDaemonRunning = running
-            delay(3000)
+        com.xaozora.manager.core.utils.NativeDaemonManager.extractAndStartDaemon(context)
+    }
+
+    LaunchedEffect(lifecycleState) {
+        if (lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+            while (true) {
+                val running = withContext(Dispatchers.IO) { RootShellHelper.executeCmd("ps -A | grep 'xaozora_daemon.*--enable-autd' > /dev/null") }
+                isDaemonRunning = running
+                delay(3000)
+            }
         }
     }
 
-    LaunchedEffect(isAutdAvailable) {
-        if (isAutdAvailable) {
+    LaunchedEffect(isAutdAvailable, lifecycleState) {
+        if (isAutdAvailable && lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
             withContext(Dispatchers.IO) {
                 while (true) {
-                    val infoPath = "${context.filesDir.path}/autd_awake_method.info"
-                    val method = RootShellHelper.readSystemFile(infoPath).trim()
+                    val infoPath = "${context.filesDir.path}/autd/autd_awake_method.info"
+                    val method = try { java.io.File(infoPath).readText().trim() } catch (e: Exception) { "" }
                     daemonMethod = if (method.isNotBlank() && !method.contains("No such file", true) && !method.contains("error", true)) {
                         method
                     } else {
@@ -130,8 +177,60 @@ fun HomeScreen(
         }
     }
 
+    val hardwarePoller = remember { com.xaozora.manager.core.utils.HardwarePoller() }
+    var showSystemInfoDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
+    
+    var showCpuControlDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var littleConfig by remember { androidx.compose.runtime.mutableStateOf<com.xaozora.manager.core.utils.CpuClusterConfig?>(null) }
+    var bigConfig by remember { androidx.compose.runtime.mutableStateOf<com.xaozora.manager.core.utils.CpuClusterConfig?>(null) }
+    
+    var showGpuControlDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var gpuConfig by remember { androidx.compose.runtime.mutableStateOf<com.xaozora.manager.core.utils.GpuConfig?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(showCpuControlDialog) {
+        if (showCpuControlDialog) {
+            withContext(Dispatchers.IO) {
+                littleConfig = com.xaozora.manager.core.utils.CpuControlUtils.getClusterConfig(0, "LITTLE")
+                bigConfig = com.xaozora.manager.core.utils.CpuControlUtils.getClusterConfig(4, "BIG")
+            }
+        }
+    }
+
+    LaunchedEffect(showGpuControlDialog) {
+        if (showGpuControlDialog) {
+            withContext(Dispatchers.IO) {
+                gpuConfig = com.xaozora.manager.core.utils.GpuControlUtils.getGpuConfig()
+            }
+        }
+    }
+
+    LaunchedEffect(lifecycleState) {
+        if (lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+            while (true) {
+                val metrics = hardwarePoller.poll()
+                cpuLoad = metrics.cpuLoad
+                coreFreqs = metrics.coreFreqs
+                coreProgress = metrics.coreProgress
+                gpuLoad = metrics.gpuLoad
+                gpuFreq = metrics.gpuFreq
+                ramUsed = metrics.ramUsed
+                ramTotal = metrics.ramTotal
+                ramProgress = metrics.ramProgress
+                swapUsed = metrics.swapUsed
+                swapTotal = metrics.swapTotal
+                swapProgress = metrics.swapProgress
+                batteryLevel = metrics.batteryLevel
+                batteryTemp = metrics.batteryTemp
+                batteryCurrent = metrics.batteryCurrent
+                
+                delay(1000)
+            }
+        }
+    }
+
     val info = systemInfo ?: SystemInfo(
-        "Loading...", "-", "-", "-", "-", "-", "-", "-", "-", "-", "Checking...", "..."
+        "Loading...", "-", "-", "-", "-", "-", "-", "-", "-", "-", "Checking...", "...", "-", "-", "-", "-", "-", "-", "-", "-"
     )
 
     Surface(
@@ -147,32 +246,81 @@ fun HomeScreen(
         ) {
             Spacer(modifier = Modifier.padding(WindowInsets.statusBars.asPaddingValues()))
             Spacer(modifier = Modifier.height(16.dp))
-            HeroCard(deviceModel = info.model)
+            HeroCard(deviceModel = info.model, hazeState = hazeState)
     
             Spacer(modifier = Modifier.height(8.dp))
 
-        if (isAutdAvailable) {
-            DaemonServiceCard(
-                isRunning = isDaemonRunning,
+        GlassCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .clickable { showSystemInfoDialog = true },
+            hazeState = hazeState,
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(Icons.Rounded.Info, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(12.dp))
+                Text("Show System Info", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
+            }
+        }
+
+        if (showSystemInfoDialog) {
+            com.xaozora.manager.ui.components.SystemInfoDialog(
                 hazeState = hazeState,
-                onClick = {
-                    val targetState = !isDaemonRunning
-                    isDaemonRunning = targetState
-                    scope.launch(Dispatchers.IO) {
-                        if (targetState) {
-                            RootShellHelper.executeCmd("/system/bin/autd > /dev/null 2>&1 &")
-                        } else {
-                            RootShellHelper.executeCmd("killall autd")
-                        }
-                        delay(500)
-                        isDaemonRunning = RootShellHelper.executeCmd("pidof autd > /dev/null")
+                info = info,
+                onDismiss = { showSystemInfoDialog = false }
+            )
+        }
+
+        if (showCpuControlDialog && littleConfig != null && bigConfig != null) {
+            com.xaozora.manager.ui.components.CpuControlDialog(
+                hazeState = hazeState,
+                littleConfig = littleConfig!!,
+                bigConfig = bigConfig!!,
+                onDismiss = {
+                    showCpuControlDialog = false
+                    littleConfig = null
+                    bigConfig = null
+                },
+                onApply = { lMin, lMax, lGov, bMin, bMax, bGov ->
+                    coroutineScope.launch(Dispatchers.IO) {
+                        com.xaozora.manager.core.utils.CpuControlUtils.applyClusterConfig(0, lMin, lMax, lGov)
+                        com.xaozora.manager.core.utils.CpuControlUtils.applyClusterConfig(4, bMin, bMax, bGov)
                     }
+                    showCpuControlDialog = false
+                    littleConfig = null
+                    bigConfig = null
+                }
+            )
+        }
+
+        if (showGpuControlDialog && gpuConfig != null) {
+            com.xaozora.manager.ui.components.GpuControlDialog(
+                hazeState = hazeState,
+                gpuConfig = gpuConfig!!,
+                onDismiss = { 
+                    showGpuControlDialog = false
+                    gpuConfig = null
+                },
+                onApply = { minF, maxF, gov, boost ->
+                    coroutineScope.launch(Dispatchers.IO) {
+                        com.xaozora.manager.core.utils.GpuControlUtils.applyGpuConfig(minF, maxF, gov, boost)
+                    }
+                    showGpuControlDialog = false
+                    gpuConfig = null
                 }
             )
         }
 
         Text(
-            text = "System Dashboard",
+            text = "System Metrics",
             style = MaterialTheme.typography.titleLarge.copy(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -181,60 +329,152 @@ fun HomeScreen(
         )
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            QuickStatCard(Modifier.weight(1f), "Battery", info.battery, Icons.Rounded.BatteryChargingFull, Color(0xFF4CAF50), hazeState)
-            QuickStatCard(Modifier.weight(1f), "RAM", info.ram, Icons.Rounded.Memory, MaterialTheme.colorScheme.primary, hazeState)
-            QuickStatCard(Modifier.weight(1f), "Uptime", info.uptime, Icons.Rounded.Timer, Color(0xFFFF9800), hazeState)
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                InfoTile(Modifier.weight(1f), "Android", info.android, Icons.Rounded.Android, Color(0xFF81C784), hazeState = hazeState)
-                InfoTile(Modifier.weight(1f), "Codename", info.device, Icons.Rounded.Smartphone, hazeState = hazeState)
+            GlassCard(modifier = Modifier.weight(1f).fillMaxHeight().clickable { showCpuControlDialog = true }, hazeState = hazeState, shape = RoundedCornerShape(20.dp)) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val animatedCpuLoad by animateFloatAsState(targetValue = cpuLoad, animationSpec = tween(800), label = "cpu")
+                    CircularProgressIndicator(
+                        progress = { animatedCpuLoad },
+                        modifier = Modifier.size(48.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text("CPU", style = MaterialTheme.typography.labelMedium)
+                        Text("${(cpuLoad * 100).toInt()}% Load", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                    }
+                }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                InfoTile(Modifier.weight(1f), "SoC", info.soc, Icons.Rounded.DeveloperBoard, hazeState = hazeState)
-                InfoTile(Modifier.weight(1f), "Display", info.resolution, Icons.Rounded.Screenshot, hazeState = hazeState)
+            GlassCard(modifier = Modifier.weight(1f).fillMaxHeight().clickable { showGpuControlDialog = true }, hazeState = hazeState, shape = RoundedCornerShape(20.dp)) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val animatedGpuLoad by animateFloatAsState(targetValue = gpuLoad, animationSpec = tween(800), label = "gpu")
+                    CircularProgressIndicator(
+                        progress = { animatedGpuLoad },
+                        modifier = Modifier.size(48.dp),
+                        color = MaterialTheme.colorScheme.tertiary,
+                        trackColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text("GPU", style = MaterialTheme.typography.labelMedium)
+                        Text(gpuFreq, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                    }
+                }
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            InfoTile(
-                Modifier.weight(1f),
-                "Root Access",
-                "${info.rootManager} ${info.rootVersion}",
-                Icons.Rounded.AdminPanelSettings,
-                isMonospace = true,
-                hazeState = hazeState
-            )
-            InfoTile(
-                Modifier.weight(1f),
-                "SELinux",
-                info.selinux,
-                Icons.Rounded.Security,
-                color = if (info.selinux.equals("Enforcing", true)) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
-                hazeState = hazeState
-            )
+        Row(
+            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            GlassCard(modifier = Modifier.weight(1f).fillMaxHeight(), hazeState = hazeState, shape = RoundedCornerShape(20.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("RAM: $ramUsed / $ramTotal", style = MaterialTheme.typography.labelMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    val animatedRamProgress by animateFloatAsState(targetValue = ramProgress, animationSpec = tween(800), label = "ram")
+                    LinearProgressIndicator(
+                        progress = { animatedRamProgress },
+                        modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                    )
+                }
+            }
+            
+            val isZramEmpty = swapTotal == "0.0 GB" || swapTotal == "0 GB"
+            if (!isZramEmpty) {
+                GlassCard(modifier = Modifier.weight(1f).fillMaxHeight(), hazeState = hazeState, shape = RoundedCornerShape(20.dp)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("ZRAM: $swapUsed / $swapTotal", style = MaterialTheme.typography.labelMedium)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        val animatedSwapProgress by animateFloatAsState(targetValue = swapProgress, animationSpec = tween(800), label = "zram")
+                        LinearProgressIndicator(
+                            progress = { animatedSwapProgress },
+                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                            color = MaterialTheme.colorScheme.tertiary,
+                            trackColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)
+                        )
+                    }
+                }
+            }
         }
 
-        if (isAutdAvailable) {
-            FullWidthCard(
-                title = "Daemon Method",
-                value = daemonMethod,
-                icon = Icons.Rounded.Sensors,
-                isError = daemonMethod == "Daemon info unavailable" || daemonMethod == "Checking Daemon...",
-                hazeState = hazeState
-            )
+        GlassCard(modifier = Modifier.fillMaxWidth(), hazeState = hazeState, shape = RoundedCornerShape(20.dp)) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Core Frequencies", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        coreFreqs.take(4).forEachIndexed { index, freq ->
+                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text("CPU $index", style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(40.dp))
+                                val prog = coreProgress.getOrElse(index) { 0f }
+                                val animatedCoreProgress by animateFloatAsState(targetValue = prog, animationSpec = tween(800), label = "core_$index")
+                                LinearProgressIndicator(
+                                    progress = { animatedCoreProgress },
+                                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp).height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(freq, style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(60.dp), textAlign = TextAlign.End)
+                            }
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        coreFreqs.drop(4).forEachIndexed { index, freq ->
+                            val coreId = index + 4
+                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text("CPU $coreId", style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(40.dp))
+                                val prog = coreProgress.getOrElse(coreId) { 0f }
+                                val animatedCoreProgress by animateFloatAsState(targetValue = prog, animationSpec = tween(800), label = "core_$coreId")
+                                LinearProgressIndicator(
+                                    progress = { animatedCoreProgress },
+                                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp).height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                    color = MaterialTheme.colorScheme.tertiary
+                                )
+                                Text(freq, style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(60.dp), textAlign = TextAlign.End)
+                            }
+                        }
+                    }
+                }
+            }
         }
 
-        FullWidthCard(
-            title = "Kernel Information",
-            value = info.kernel.ifBlank { "-" },
-            icon = Icons.Rounded.SettingsSystemDaydream,
-            hazeState = hazeState
-        )
+        GlassCard(
+            modifier = Modifier.fillMaxWidth().clickable { onNavigateToBattery() },
+            hazeState = hazeState, 
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(imageVector = Icons.Rounded.BatteryChargingFull, contentDescription = "Battery", tint = Color(0xFF4CAF50), modifier = Modifier.size(28.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("$batteryLevel%", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(imageVector = Icons.Rounded.Bolt, contentDescription = "Current", tint = Color(0xFFFF9800), modifier = Modifier.size(28.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(batteryCurrent, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(imageVector = Icons.Rounded.Thermostat, contentDescription = "Temperature", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(28.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(batteryTemp, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                }
+            }
+        }
         
         Spacer(modifier = Modifier.height(140.dp))
         Spacer(modifier = Modifier.navigationBarsPadding())
@@ -243,11 +483,11 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HeroCard(deviceModel: String) {
-    val infiniteTransition = rememberInfiniteTransition(label = "hero_shadow")
+private fun HeroCard(deviceModel: String, hazeState: HazeState) {
+    val infiniteTransition = rememberInfiniteTransition(label = "hero_border")
     val angle by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = (2.0 * Math.PI).toFloat(),
+        targetValue = 360f,
         animationSpec = infiniteRepeatable(
             animation = tween(4000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
@@ -255,172 +495,92 @@ private fun HeroCard(deviceModel: String) {
         label = "angle"
     )
 
-    val primaryColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
-    val tertiaryColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.3f)
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(200.dp)
-            .drawBehind {
-                val offsetX = 10.dp.toPx() * cos(angle)
-                val offsetY = 10.dp.toPx() * sin(angle)
-                drawIntoCanvas { canvas ->
-                    val paint = Paint().apply {
-                        color = primaryColor
-                        @Suppress("DEPRECATION")
-                        asFrameworkPaint().maskFilter = BlurMaskFilter(20.dp.toPx(), BlurMaskFilter.Blur.NORMAL)
-                    }
-                    canvas.drawRoundRect(
-                        left = offsetX, top = offsetY,
-                        right = size.width + offsetX, bottom = size.height + offsetY,
-                        radiusX = 32.dp.toPx(), radiusY = 32.dp.toPx(),
-                        paint = paint
-                    )
-                    paint.color = tertiaryColor
-                    canvas.drawRoundRect(
-                        left = -offsetX, top = -offsetY,
-                        right = size.width - offsetX, bottom = size.height - offsetY,
-                        radiusX = 32.dp.toPx(), radiusY = 32.dp.toPx(),
-                        paint = paint
-                    )
-                }
-            }
-            .clip(RoundedCornerShape(32.dp))
-            .background(
-                brush = Brush.linearGradient(
-                    colors = listOf(Color(0xFF311B92), Color(0xFF039BE5))
-                )
-            )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(28.dp),
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = "Running on",
-                style = MaterialTheme.typography.labelLarge.copy(
-                    color = Color.White.copy(alpha = 0.7f),
-                    letterSpacing = MaterialTheme.typography.labelLarge.letterSpacing * 1.2
-                )
-            )
-            Text(
-                text = deviceModel,
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Box(
-                modifier = Modifier
-                    .background(
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
-                        shape = RoundedCornerShape(16.dp)
-                    )
-                    .border(1.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(16.dp))
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-            ) {
-                Text(
-                    text = "Aozora Kernel Manager",
-                    color = Color.White,
-                    fontWeight = FontWeight.SemiBold,
-                    style = MaterialTheme.typography.labelSmall
-                )
-            }
-        }
-        Image(
-            painter = painterResource(id = R.drawable.kai), 
-            contentDescription = "Aozora Logo",
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .size(180.dp)
-                .align(Alignment.BottomEnd)
-                .offset(x = 20.dp, y = 20.dp) 
-                .alpha(0.25f) 
-        )
-    }
-}
-
-@Composable
-private fun DaemonServiceCard(isRunning: Boolean, hazeState: HazeState, onClick: () -> Unit) {
-    val colorScheme = MaterialTheme.colorScheme
-    val bgColor by animateColorAsState(if (isRunning) colorScheme.primaryContainer.copy(alpha = 0.25f) else colorScheme.surfaceContainer, label = "bg")
-    val borderColor by animateColorAsState(if (isRunning) colorScheme.primary.copy(alpha = 0.4f) else colorScheme.outlineVariant.copy(alpha = 0.5f), label = "border")
-    val iconBgColor by animateColorAsState(if (isRunning) colorScheme.primary.copy(alpha = 0.2f) else colorScheme.surfaceContainerHighest.copy(alpha = 0.5f), label = "iconBg")
-    val iconColor by animateColorAsState(if (isRunning) colorScheme.primary else colorScheme.secondary, label = "iconColor")
-
-    val switchOffset by animateDpAsState(if (isRunning) 24.dp else 0.dp, label = "switchOffset")
-    val switchBg by animateColorAsState(if (isRunning) colorScheme.primary else colorScheme.surfaceContainerHighest, label = "switchBg")
-    val thumbColor by animateColorAsState(if (isRunning) colorScheme.onPrimary else colorScheme.outline, label = "thumbColor")
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val tertiaryColor = MaterialTheme.colorScheme.tertiary
 
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .clickable(onClick = onClick)
-            .border(1.2.dp, borderColor, RoundedCornerShape(24.dp)),
+            .drawWithContent {
+                drawContent()
+                val center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2)
+                val shader = android.graphics.SweepGradient(
+                    center.x, center.y,
+                    intArrayOf(
+                        android.graphics.Color.TRANSPARENT,
+                        primaryColor.toArgb(),
+                        tertiaryColor.toArgb(),
+                        android.graphics.Color.TRANSPARENT
+                    ),
+                    floatArrayOf(0f, 0.4f, 0.6f, 1f)
+                )
+                val matrix = android.graphics.Matrix()
+                matrix.postRotate(angle, center.x, center.y)
+                shader.setLocalMatrix(matrix)
+
+                drawRoundRect(
+                    brush = androidx.compose.ui.graphics.ShaderBrush(shader),
+                    size = size,
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(20.dp.toPx(), 20.dp.toPx()),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx())
+                )
+            },
         hazeState = hazeState,
-        shape = RoundedCornerShape(24.dp)
+        shape = RoundedCornerShape(20.dp)
     ) {
-        Box(modifier = Modifier.fillMaxWidth().background(if (isRunning) bgColor else Color.Transparent).padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.fillMaxWidth().height(160.dp)) {
+            Image(
+                painter = painterResource(id = R.drawable.kai), 
+                contentDescription = "Aozora Logo",
+                contentScale = ContentScale.Fit,
+                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(MaterialTheme.colorScheme.primary),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(180.dp)
+                    .offset(x = 20.dp, y = 30.dp)
+                    .alpha(0.1f)
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "Running on",
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        letterSpacing = MaterialTheme.typography.labelLarge.letterSpacing * 1.2
+                    )
+                )
+                Text(
+                    text = deviceModel,
+                    style = MaterialTheme.typography.headlineLarge.copy(
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+                Spacer(modifier = Modifier.height(12.dp))
                 Box(
                     modifier = Modifier
-                        .background(iconBgColor, CircleShape)
-                        .padding(12.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
-                    Icon(
-                        imageVector = if (isRunning) Icons.Rounded.Memory else Icons.Rounded.PowerOff,
-                        contentDescription = null,
-                        tint = iconColor,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Daemon Service",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = if (isRunning) colorScheme.onPrimaryContainer else colorScheme.onSurface
-                        )
-                    )
-                    Text(
-                        text = if (isRunning) "Running (autd)" else "Stopped",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = if (isRunning) colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else colorScheme.onSurfaceVariant
-                        )
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(width = 52.dp, height = 28.dp)
-                        .background(color = switchBg, shape = CircleShape)
-                        .border(
-                            width = 1.dp,
-                            color = if (isRunning) colorScheme.primary else colorScheme.outlineVariant.copy(alpha = 0.5f),
-                            shape = CircleShape
-                        )
-                        .padding(4.dp),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .offset(x = switchOffset)
-                            .size(20.dp)
-                            .background(thumbColor, CircleShape)
+                        text = "Aozora Kernel Manager",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.labelSmall
                     )
                 }
             }
         }
     }
 }
+
 
 @Composable
 private fun QuickStatCard(
@@ -513,7 +673,8 @@ private fun FullWidthCard(
     value: String,
     icon: ImageVector,
     isError: Boolean = false,
-    hazeState: HazeState
+    hazeState: HazeState,
+    trailingContent: @Composable (() -> Unit)? = null
 ) {
     val activeColor = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     GlassCard(
@@ -548,6 +709,12 @@ private fun FullWidthCard(
                     )
                 )
             }
+            if (trailingContent != null) {
+                Spacer(modifier = Modifier.width(16.dp))
+                trailingContent()
+            }
         }
     }
 }
+
+
