@@ -38,10 +38,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material.icons.outlined.DarkMode
-import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.Update
 import androidx.compose.material3.CircularProgressIndicator
@@ -51,7 +48,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -83,8 +79,6 @@ import com.xaozora.manager.core.network.UpdateManager
 import com.xaozora.manager.core.network.UpdateCheckResult
 import com.xaozora.manager.ui.components.GlassCard
 import com.xaozora.manager.ui.components.UpdateDialog
-import com.xaozora.manager.ui.theme.AppThemeMode
-import com.xaozora.manager.ui.theme.LocalThemeManager
 import dev.chrisbanes.haze.HazeState
 import androidx.compose.material3.SnackbarHostState
 import kotlinx.coroutines.Dispatchers
@@ -102,8 +96,6 @@ fun AboutScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val themeManager = LocalThemeManager.current
-    val currentTheme by themeManager.themeMode.collectAsState()
 
     var appVersion by remember { mutableStateOf("Loading...") }
     var isAutdAvailable by remember { mutableStateOf(false) }
@@ -179,7 +171,7 @@ fun AboutScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         ProfileCard(
-            name = "Yuu507",
+            name = "Kaiyaa77",
             role = "Kernel Developer",
             description = "Creator and Maintainer of Aozora Kernel.",
             actionIcon = Icons.AutoMirrored.Rounded.Send,
@@ -193,7 +185,7 @@ fun AboutScreen(
         ProfileCard(
             name = "xMikkkaa",
             role = "LIP",
-            description = "Creator of Aozora Kernel Manager and Automation Daemon.",
+            description = "Creator of Aozora Kernel Manager.",
             imageUrl = "https://avatars.githubusercontent.com/xMikkkaa",
             actionIcon = Icons.Outlined.Code,
             actionLabel = "View GitHub Profile",
@@ -201,26 +193,18 @@ fun AboutScreen(
             hazeState = hazeState,
             angle = angle
         )
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        Text("Appearance", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-        Spacer(modifier = Modifier.height(12.dp))
-
-        GlassCard(
-            modifier = Modifier.fillMaxWidth().height(70.dp),
+        ProfileCard(
+            name = "Aris",
+            role = "Lead Tester",
+            description = "Lead tester ensuring system stability.",
+            actionIcon = Icons.AutoMirrored.Rounded.Send,
+            actionLabel = "View Telegram Profile",
+            onActionClick = { launchUrl("https://t.me/Aris0103") },
             hazeState = hazeState,
-            shape = RoundedCornerShape(50.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                ThemeItem("Auto", Icons.Outlined.BrightnessAuto, currentTheme == AppThemeMode.AUTO) { themeManager.setThemeMode(AppThemeMode.AUTO) }
-                ThemeItem("Light", Icons.Outlined.LightMode, currentTheme == AppThemeMode.LIGHT) { themeManager.setThemeMode(AppThemeMode.LIGHT) }
-                ThemeItem("Dark", Icons.Outlined.DarkMode, currentTheme == AppThemeMode.DARK) { themeManager.setThemeMode(AppThemeMode.DARK) }
-            }
-        }
+            angle = angle
+        )
         Spacer(modifier = Modifier.height(24.dp))
 
         Text("Updates", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
@@ -253,7 +237,7 @@ fun AboutScreen(
                     try {
                         val result = UpdateManager.checkUpdates(appVersion)
                         updateCheckResult = result
-                        if (result.appUpdate.hasUpdate || result.autdUpdate.hasUpdate) {
+                        if (result.appUpdate.hasUpdate) {
                             showUpdateDialog = true
                         } else {
                             snackbarHostState.showSnackbar("You are on the latest version.")
@@ -310,21 +294,10 @@ fun AboutScreen(
     if (showUpdateDialog && updateCheckResult != null) {
         val result = updateCheckResult!!
         val isAppUpdate = result.appUpdate.hasUpdate
-        val isAutdUpdate = result.autdUpdate.hasUpdate
 
-        val newVersionDisplay = buildString {
-            if (isAppUpdate) append("App: v${result.appUpdate.newVersion} ")
-            if (isAutdUpdate) append("AUTD: v${result.autdUpdate.newVersion}")
-        }.trim()
+        val newVersionDisplay = "App: v${result.appUpdate.newVersion}"
 
-        val changelogDisplay = buildString {
-            if (isAppUpdate) {
-                append("App Update Notes:\n${result.appUpdate.releaseNotes}\n\n")
-            }
-            if (isAutdUpdate) {
-                append("Daemon Update Notes:\n${result.autdUpdate.releaseNotes}")
-            }
-        }.trim()
+        val changelogDisplay = "App Update Notes:\n${result.appUpdate.releaseNotes}\n\n"
 
         UpdateDialog(
             hazeState = hazeState,
@@ -339,25 +312,6 @@ fun AboutScreen(
                     
                     if (isAppUpdate) {
                         UpdateManager.performAppUpdate(result.appUpdate.downloadUrl, context.cacheDir)
-                    } else if (isAutdUpdate) {
-                        val success = UpdateManager.performAutdUpdate(
-                            result.autdUpdate.downloadUrl, 
-                            context.cacheDir, 
-                            result.autdUpdate.newVersion
-                        )
-                        if (success) {
-                            snackbarHostState.showSnackbar(
-                                message = "AUTD updated to v${result.autdUpdate.newVersion}. Please reboot to apply changes.",
-                                actionLabel = "Reboot",
-                                duration = androidx.compose.material3.SnackbarDuration.Long
-                            ).let { snackbarResult ->
-                                if (snackbarResult == androidx.compose.material3.SnackbarResult.ActionPerformed) {
-                                    RootShellHelper.executeCmd("reboot")
-                                }
-                            }
-                        } else {
-                            snackbarHostState.showSnackbar("AUTD update failed.")
-                        }
                     }
                 }
             }
@@ -496,30 +450,6 @@ private fun rememberNetworkImage(url: String?): ImageBitmap? {
         }
     }
     return bitmap
-}
-
-@Composable
-private fun ThemeItem(label: String, icon: ImageVector, isSelected: Boolean, onClick: () -> Unit) {
-    val colorScheme = MaterialTheme.colorScheme
-    val bgColor by animateColorAsState(if (isSelected) colorScheme.primaryContainer.copy(alpha = 0.25f) else Color.Transparent, label = "bg")
-    val borderColor by animateColorAsState(if (isSelected) colorScheme.primary.copy(alpha = 0.4f) else Color.Transparent, label = "border")
-    val contentColor by animateColorAsState(if (isSelected) colorScheme.onPrimaryContainer else colorScheme.secondary, label = "content")
-
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(30.dp))
-            .background(bgColor)
-            .border(1.dp, borderColor, RoundedCornerShape(30.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = if (isSelected) 20.dp else 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, contentDescription = null, tint = contentColor)
-        if (isSelected) {
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(label, style = MaterialTheme.typography.bodyMedium.copy(color = contentColor, fontWeight = FontWeight.Bold))
-        }
-    }
 }
 
 @Composable

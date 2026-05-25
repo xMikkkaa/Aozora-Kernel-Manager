@@ -117,7 +117,7 @@ fun AppManagerScreen(
             val correctedApps = apps.map { config ->
                 if ((config.mode == "g" && !gExists) || (config.mode == "g2" && !g2Exists)) {
                     val packageName = config.app.packageName
-                    val cmd = "sed -i '/^${packageName}_/d' /data/data/com.xaozora.manager/files/applist; echo \"${packageName}_p\" >> /data/data/com.xaozora.manager/files/applist"
+                    val cmd = "sed -i '/^${packageName}_/d' /data/data/com.xaozora.manager/files/autd/applist; echo \"${packageName}_p\" >> /data/data/com.xaozora.manager/files/autd/applist"
                     RootShellHelper.executeCmd(cmd)
                     config.copy(mode = "p")
                 } else {
@@ -147,7 +147,7 @@ fun AppManagerScreen(
     val addAppToConfig = { app: AppInfoItem ->
         scope.launch(Dispatchers.IO) {
             val packageName = app.packageName
-            val cmd = "echo \"${packageName}_p\" >> /data/data/com.xaozora.manager/files/applist"
+            val cmd = "echo \"${packageName}_p\" >> /data/data/com.xaozora.manager/files/autd/applist"
             if (RootShellHelper.executeCmd(cmd)) {
                 scope.launch { snackbarHostState.showSnackbar("App added: ${app.name}") }
                 refreshApps()
@@ -160,7 +160,7 @@ fun AppManagerScreen(
     val updateAppConfig = { app: AppInfoItem, newMode: String ->
         scope.launch(Dispatchers.IO) {
             val packageName = app.packageName
-            val cmd = "sed -i '/^${packageName}_/d' /data/data/com.xaozora.manager/files/applist; echo \"${packageName}_$newMode\" >> /data/data/com.xaozora.manager/files/applist"
+            val cmd = "sed -i '/^${packageName}_/d' /data/data/com.xaozora.manager/files/autd/applist; echo \"${packageName}_$newMode\" >> /data/data/com.xaozora.manager/files/autd/applist"
             if (RootShellHelper.executeCmd(cmd)) {
                 val modeLabel = when (newMode) {
                     "p" -> "Power"
@@ -178,7 +178,7 @@ fun AppManagerScreen(
 
     val removeAppFromConfig = { packageName: String ->
         scope.launch(Dispatchers.IO) {
-            val cmd = "sed -i '/^${packageName}_/d' /data/data/com.xaozora.manager/files/applist"
+            val cmd = "sed -i '/^${packageName}_/d' /data/data/com.xaozora.manager/files/autd/applist"
             if (RootShellHelper.executeCmd(cmd)) {
                 scope.launch { snackbarHostState.showSnackbar("App removed from list") }
                 refreshApps()

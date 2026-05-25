@@ -37,6 +37,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -76,6 +77,7 @@ import kotlinx.coroutines.withContext
 fun TweaksScreen(
     hazeState: HazeState,
     snackbarHostState: SnackbarHostState,
+    isAutdAvailable: Boolean,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -88,12 +90,11 @@ fun TweaksScreen(
     var bypassCharging by remember { mutableStateOf(false) }
     var optimizeGameThread by remember { mutableStateOf(false) }
     var idleCharging by remember { mutableStateOf(false) }
-    var isAutdAvailable by remember { mutableStateOf(false) }
 
     var showFlushDialog by remember { mutableStateOf(false) }
 
     suspend fun fetchRamStats() = withContext(Dispatchers.IO) {
-        val meminfo = RootShellHelper.readSystemFile("/proc/meminfo")
+        val meminfo = try { java.io.File("/proc/meminfo").readText() } catch (e: Exception) { "" }
         var total = 0
         var free = 0
         var available = 0
@@ -118,16 +119,20 @@ fun TweaksScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
+
+    LaunchedEffect(lifecycleState) {
         withContext(Dispatchers.IO) {
-            isAutdAvailable = RootShellHelper.checkFileExists("/system/bin/autd")
             bypassCharging = RootShellHelper.readSystemFile("/sys/class/power_supply/battery/input_suspend").trim() == "1"
-            optimizeGameThread = RootShellHelper.readSystemFile("${context.filesDir.path}/autd_opt_allow").trim() == "1"
-            idleCharging = RootShellHelper.readSystemFile("${context.filesDir.path}/autd_idle_charging").trim() == "1"
+            optimizeGameThread = try { java.io.File(context.filesDir, "autd/autd_opt_allow").readText().trim() == "1" } catch (e: Exception) { false }
+            idleCharging = try { java.io.File(context.filesDir, "autd/autd_idle_charging").readText().trim() == "1" } catch (e: Exception) { false }
         }
-        while (true) {
-            fetchRamStats()
-            delay(2000)
+        if (lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+            while (true) {
+                fetchRamStats()
+                delay(2000)
+            }
         }
     }
 
@@ -313,33 +318,33 @@ fun TweaksScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-            Text("Quick Toggles", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-            Spacer(modifier = Modifier.height(12.dp))
+            if (isAutdAvailable) {
+                Spacer(modifier = Modifier.height(24.dp))
+                Text("Quick Toggles", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                Spacer(modifier = Modifier.height(12.dp))
 
-            CustomToggleCard(
-                title = "Bypass Charging",
-                subtitle = "Stop charging while plugged in to reduce heat.",
-                icon = Icons.Rounded.BatteryChargingFull,
-                checked = bypassCharging,
-                hazeState = hazeState,
-                onCheckedChange = { newVal ->
-                    scope.launch(Dispatchers.IO) {
-                        if (RootShellHelper.writeSystemFile("/sys/class/power_supply/battery/input_suspend", if (newVal) "1" else "0")) {
-                            bypassCharging = newVal
-                            scope.launch {
-                                snackbarHostState.showSnackbar(if (newVal) "Bypass Charging Enabled" else "Bypass Charging Disabled")
-                            }
-                        } else {
-                            scope.launch {
-                                snackbarHostState.showSnackbar("Failed to toggle Bypass Charging")
+                CustomToggleCard(
+                    title = "Bypass Charging",
+                    subtitle = "Stop charging while plugged in to reduce heat.",
+                    icon = Icons.Rounded.BatteryChargingFull,
+                    checked = bypassCharging,
+                    hazeState = hazeState,
+                    onCheckedChange = { newVal ->
+                        scope.launch(Dispatchers.IO) {
+                            if (RootShellHelper.writeSystemFile("/sys/class/power_supply/battery/input_suspend", if (newVal) "1" else "0")) {
+                                bypassCharging = newVal
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(if (newVal) "Bypass Charging Enabled" else "Bypass Charging Disabled")
+                                }
+                            } else {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Failed to toggle Bypass Charging")
+                                }
                             }
                         }
                     }
-                }
-            )
+                )
 
-            if (isAutdAvailable) {
                 Spacer(modifier = Modifier.height(12.dp))
                 CustomToggleCard(
                     title = "Optimize Game Thread",
@@ -349,7 +354,7 @@ fun TweaksScreen(
                     hazeState = hazeState,
                     onCheckedChange = { newVal ->
                         scope.launch(Dispatchers.IO) {
-                            if (RootShellHelper.writeSystemFile("${context.filesDir.path}/autd_opt_allow", if (newVal) "1" else "0")) {
+                            if (RootShellHelper.writeSystemFile("${context.filesDir.path}/autd/autd_opt_allow", if (newVal) "1" else "0")) {
                                 optimizeGameThread = newVal
                                 scope.launch {
                                     val status = if (newVal) "Enabled" else "Disabled"
@@ -372,7 +377,7 @@ fun TweaksScreen(
                     hazeState = hazeState,
                     onCheckedChange = { newVal ->
                         scope.launch(Dispatchers.IO) {
-                            if (RootShellHelper.writeSystemFile("${context.filesDir.path}/autd_idle_charging", if (newVal) "1" else "0")) {
+                            if (RootShellHelper.writeSystemFile("${context.filesDir.path}/autd/autd_idle_charging", if (newVal) "1" else "0")) {
                                 idleCharging = newVal
                                 scope.launch {
                                     val status = if (newVal) "Enabled" else "Disabled"
@@ -407,12 +412,12 @@ private fun CustomToggleCard(
     val colorScheme = MaterialTheme.colorScheme
     val bgColor by animateColorAsState(if (checked) colorScheme.primaryContainer.copy(alpha = 0.25f) else colorScheme.surfaceContainer, label = "bg")
     val borderColor by animateColorAsState(if (checked) colorScheme.primary.copy(alpha = 0.4f) else colorScheme.outlineVariant.copy(alpha = 0.5f), label = "border")
-    val iconBgColor by animateColorAsState(if (checked) colorScheme.primary.copy(alpha = 0.2f) else colorScheme.surfaceContainerHighest.copy(alpha = 0.5f), label = "iconBg")
-    val iconColor by animateColorAsState(if (checked) colorScheme.primary else colorScheme.secondary, label = "iconColor")
+    val iconBgColor by animateColorAsState(if (checked) colorScheme.primaryContainer else colorScheme.surfaceContainerHighest.copy(alpha = 0.5f), label = "iconBg")
+    val iconColor by animateColorAsState(if (checked) colorScheme.onPrimaryContainer else colorScheme.secondary, label = "iconColor")
     
     val switchOffset by animateDpAsState(if (checked) 24.dp else 0.dp, label = "switchOffset")
-    val switchBg by animateColorAsState(if (checked) colorScheme.primary else colorScheme.surfaceContainerHighest, label = "switchBg")
-    val thumbColor by animateColorAsState(if (checked) colorScheme.onPrimary else colorScheme.outline, label = "thumbColor")
+    val switchBg by animateColorAsState(if (checked) colorScheme.primaryContainer else colorScheme.surfaceContainerHighest, label = "switchBg")
+    val thumbColor by animateColorAsState(if (checked) colorScheme.onPrimaryContainer else colorScheme.outline, label = "thumbColor")
 
     GlassCard(
         modifier = Modifier
@@ -432,7 +437,7 @@ private fun CustomToggleCard(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(subtitle, style = MaterialTheme.typography.bodySmall.copy(color = if (checked) colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else colorScheme.onSurfaceVariant))
                 }
-                Box(modifier = Modifier.size(52.dp, 28.dp).background(switchBg, CircleShape).border(1.dp, if (checked) colorScheme.primary else colorScheme.outlineVariant.copy(alpha = 0.5f), CircleShape).padding(4.dp), contentAlignment = Alignment.CenterStart) {
+                Box(modifier = Modifier.size(52.dp, 28.dp).background(switchBg, CircleShape).border(1.dp, if (checked) colorScheme.primary.copy(alpha = 0.4f) else colorScheme.outlineVariant.copy(alpha = 0.5f), CircleShape).padding(4.dp), contentAlignment = Alignment.CenterStart) {
                     Box(modifier = Modifier.offset(x = switchOffset).size(20.dp).background(thumbColor, CircleShape))
                 }
             }

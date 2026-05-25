@@ -50,6 +50,8 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -122,9 +124,29 @@ fun TuningScreen(
         label = "angle"
     )
 
+    val prefs = remember { context.getSharedPreferences("aozora_prefs", android.content.Context.MODE_PRIVATE) }
+    var isLoading by remember { mutableStateOf(true) }
+    
+    DisposableEffect(context) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { sharedPreferences, key ->
+            if (key == "autd_enabled") {
+                scope.launch(Dispatchers.IO) {
+                    val autdExists = RootShellHelper.checkFileExists("${context.filesDir.path}/xaozora_daemon")
+                    val enabled = sharedPreferences.getBoolean("autd_enabled", true)
+                    isAutdAvailable = autdExists && enabled
+                }
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose {
+            prefs.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            isAutdAvailable = RootShellHelper.checkFileExists("/system/bin/autd")
+            val autdExists = RootShellHelper.checkFileExists("${context.filesDir.path}/xaozora_daemon")
+            isAutdAvailable = autdExists && prefs.getBoolean("autd_enabled", true)
 
             val propOutput = RootShellHelper.executeCmdAndGetOutput(
                 "cat \$(grep -il 'id=.*aozora' /data/adb/modules/*/module.prop 2>/dev/null | head -n 1)"
@@ -146,16 +168,20 @@ fun TuningScreen(
                     RootShellHelper.checkFileExists("/system/bin/${profile.id}")
             }
         }
+        isLoading = false
     }
 
-    LaunchedEffect(isAutdAvailable) {
-        if (isAutdAvailable) {
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
+
+    LaunchedEffect(isAutdAvailable, lifecycleState) {
+        if (isAutdAvailable && lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
             withContext(Dispatchers.IO) {
                 while (true) {
-                    val status =
-                        RootShellHelper.readSystemFile("${context.filesDir.path}/autd_status")
-                            .trim()
-                    if (status.isNotBlank()) activeProfileId = status
+                    try {
+                        val status = java.io.File("/data/data/com.xaozora.manager/files/autd/autd_status").readText().trim()
+                        if (status.isNotBlank()) activeProfileId = status
+                    } catch (e: Exception) {}
                     delay(1000)
                 }
             }
@@ -239,7 +265,19 @@ fun TuningScreen(
                 }
             }
 
-            items(visibleProfiles) { profile ->
+            if (isLoading) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        androidx.compose.material3.CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            } else {
+                items(visibleProfiles) { profile ->
                 val isAvailable = profileAvailability[profile.id] == true
                 val isActive = activeProfileId == profile.id
                 val isProcessing = processingProfile == profile.id
@@ -291,16 +329,29 @@ fun TuningScreen(
                         .clickable(enabled = isAvailable && !isProcessing) {
                             scope.launch(Dispatchers.IO) {
                                 processingProfile = profile.id
-                                val cmd = if (profile.id == "cachecleaner") {
-                                    "/system/bin/cachecleaner"
+                                if (profile.id == "cachecleaner") {
+                                    RootShellHelper.executeCmd("/system/bin/cachecleaner")
                                 } else if (isAutdAvailable) {
-                                    "echo '${profile.id}' > ${context.filesDir.path}/autd_base_mode; echo '${profile.id}' > ${context.filesDir.path}/autd_status"
+                                    scope.launch(Dispatchers.IO) {
+                                        processingProfile = profile.id
+                                        try {
+                                            val autdDir = "/data/data/com.xaozora.manager/files/autd"
+                                            val writeCmd = "rm -f $autdDir/autd_base_mode; echo -n '${profile.id}' > $autdDir/autd_base_mode"
+                                            
+                                            if (RootShellHelper.executeCmd(writeCmd)) {
+                                                android.util.Log.d("TuningScreen", "Successfully wrote profile ${profile.id} via root shell")
+                                            } else {
+                                                android.util.Log.e("TuningScreen", "Failed to write profile via root shell")
+                                            }
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("TuningScreen", "Error in root write", e)
+                                        } finally {
+                                            processingProfile = null
+                                        }
+                                    }
                                 } else {
-                                    "/system/bin/${profile.id}"
+                                    RootShellHelper.executeCmd("/system/bin/${profile.id}")
                                 }
-                                RootShellHelper.executeCmd(cmd)
-                                if (profile.id != "cachecleaner" && isAutdAvailable) activeProfileId =
-                                    profile.id
                                 processingProfile = null
 
                                 scope.launch {
@@ -359,6 +410,7 @@ fun TuningScreen(
                         }
                     }
                 }
+            }
             }
 
             item(span = { GridItemSpan(maxLineSpan) }) {
