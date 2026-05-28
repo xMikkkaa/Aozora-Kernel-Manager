@@ -197,6 +197,15 @@ pub fn enable_idle_charging() {
 
 pub fn disable_idle_charging() {
     if !IS_IDLE_CHARGING_ACTIVE.load(Ordering::Relaxed) {
+        let active_switches = get_active_switches();
+        for sw in active_switches {
+            let path = PathBuf::from(sw.path);
+            if sw.use_max {
+                write_sysfs(&path, &get_safe_fallback(&path, sw.enable));
+            } else {
+                write_sysfs(&path, sw.enable);
+            }
+        }
         return;
     }
     

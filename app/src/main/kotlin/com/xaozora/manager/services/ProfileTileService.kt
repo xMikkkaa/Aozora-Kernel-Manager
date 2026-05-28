@@ -45,7 +45,7 @@ class ProfileTileService : TileService() {
                 if (isAvailable) {
                     tile.state = Tile.STATE_ACTIVE
                     try {
-                        val statusFile = File("/data/data/com.xaozora.manager/files/autd/autd_status")
+                        val statusFile = File(filesDir, "autd/autd_status")
                         if (statusFile.exists() && statusFile.canRead()) {
                             val activeId = statusFile.readText().trim()
                             val activeProfile = profiles.find { it.first == activeId }
@@ -96,7 +96,7 @@ class ProfileTileService : TileService() {
 
                 var currentId = "balance"
                 try {
-                    val statusFile = File("/data/data/com.xaozora.manager/files/autd/autd_status")
+                    val statusFile = File(filesDir, "autd/autd_status")
                     if (statusFile.exists() && statusFile.canRead()) {
                         currentId = statusFile.readText().trim()
                     }
@@ -169,7 +169,7 @@ class ProfileTileService : TileService() {
     private fun applyProfile(profileId: String) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val autdDir = "/data/data/com.xaozora.manager/files/autd"
+                val autdDir = "${filesDir.absolutePath}/autd"
                 val writeCmd = "rm -f $autdDir/autd_base_mode; echo -n '$profileId' > $autdDir/autd_base_mode"
                 
                 if (RootShellHelper.executeCmd(writeCmd)) {

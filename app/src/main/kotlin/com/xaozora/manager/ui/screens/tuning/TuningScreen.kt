@@ -179,7 +179,7 @@ fun TuningScreen(
             withContext(Dispatchers.IO) {
                 while (true) {
                     try {
-                        val status = java.io.File("/data/data/com.xaozora.manager/files/autd/autd_status").readText().trim()
+                        val status = java.io.File(context.filesDir, "autd/autd_status").readText().trim()
                         if (status.isNotBlank()) activeProfileId = status
                     } catch (e: Exception) {}
                     delay(1000)
@@ -326,33 +326,30 @@ fun TuningScreen(
                             } else Modifier
                         )
                         .clip(RoundedCornerShape(28.dp))
-                        .clickable(enabled = isAvailable && !isProcessing) {
+                        .clickable(enabled = isAvailable && processingProfile == null) {
                             scope.launch(Dispatchers.IO) {
                                 processingProfile = profile.id
-                                if (profile.id == "cachecleaner") {
-                                    RootShellHelper.executeCmd("/system/bin/cachecleaner")
-                                } else if (isAutdAvailable) {
-                                    scope.launch(Dispatchers.IO) {
-                                        processingProfile = profile.id
-                                        try {
-                                            val autdDir = "/data/data/com.xaozora.manager/files/autd"
-                                            val writeCmd = "rm -f $autdDir/autd_base_mode; echo -n '${profile.id}' > $autdDir/autd_base_mode"
-                                            
-                                            if (RootShellHelper.executeCmd(writeCmd)) {
-                                                android.util.Log.d("TuningScreen", "Successfully wrote profile ${profile.id} via root shell")
-                                            } else {
-                                                android.util.Log.e("TuningScreen", "Failed to write profile via root shell")
-                                            }
-                                        } catch (e: Exception) {
-                                            android.util.Log.e("TuningScreen", "Error in root write", e)
-                                        } finally {
-                                            processingProfile = null
+                                try {
+                                    delay(600) 
+                                    if (profile.id == "cachecleaner") {
+                                        RootShellHelper.executeCmd("/system/bin/cachecleaner")
+                                    } else if (isAutdAvailable) {
+                                        val autdDir = "${context.filesDir.absolutePath}/autd"
+                                        val writeCmd = "rm -f $autdDir/autd_base_mode; echo -n '${profile.id}' > $autdDir/autd_base_mode"
+                                        
+                                        if (RootShellHelper.executeCmd(writeCmd)) {
+                                            android.util.Log.d("TuningScreen", "Successfully wrote profile ${profile.id} via root shell")
+                                        } else {
+                                            android.util.Log.e("TuningScreen", "Failed to write profile via root shell")
                                         }
+                                    } else {
+                                        RootShellHelper.executeCmd("/system/bin/${profile.id}")
                                     }
-                                } else {
-                                    RootShellHelper.executeCmd("/system/bin/${profile.id}")
+                                } catch (e: Exception) {
+                                    android.util.Log.e("TuningScreen", "Error applying profile", e)
+                                } finally {
+                                    processingProfile = null
                                 }
-                                processingProfile = null
 
                                 scope.launch {
                                     snackbarHostState.showSnackbar(
@@ -399,11 +396,11 @@ fun TuningScreen(
                             )
                             if (isAvailable && profile.id != "cachecleaner" && isAutdAvailable) {
                                 Text(
-                                    text = if (isActive) "ACTIVE" else "Tap to activate",
+                                    text = if (isProcessing) "Applying..." else if (isActive) "ACTIVE" else "Tap to activate",
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontFamily = if (isActive) FontFamily.Monospace else null,
-                                        color = if (isActive) colorScheme.primary else colorScheme.outline,
-                                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal
+                                        color = if (isActive || isProcessing) colorScheme.primary else colorScheme.outline,
+                                        fontWeight = if (isActive || isProcessing) FontWeight.Bold else FontWeight.Normal
                                     )
                                 )
                             }

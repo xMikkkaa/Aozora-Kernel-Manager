@@ -30,11 +30,17 @@ object NativeDaemonManager {
             Log.d(TAG, "Starting daemon. enableAutd: $shouldEnableAutd")
 
             try {
+                val tmpFile = File(context.filesDir, "${DAEMON_FILENAME}_tmp")
                 context.assets.open(DAEMON_FILENAME).use { input ->
-                    FileOutputStream(daemonFile).use { output ->
+                    FileOutputStream(tmpFile).use { output ->
                         input.copyTo(output)
                     }
                 }
+                
+                RootShellHelper.executeCmd("pkill -15 $DAEMON_FILENAME; killall -15 $DAEMON_FILENAME")
+                kotlinx.coroutines.delay(500)
+                
+                RootShellHelper.executeCmd("mv ${tmpFile.absolutePath} ${daemonFile.absolutePath}")
             } catch (e: Exception) {
                 Log.e(TAG, "Extraction failed", e)
                 return@withLock false
@@ -47,23 +53,26 @@ object NativeDaemonManager {
             File(context.filesDir, "autd").mkdirs()
             val batteryLogPath = File(context.filesDir, "battmon/battery_logger.jsonl").absolutePath
             
+            val autdInfoFile = File(context.filesDir, "autd/autd_awake_method.info")
+            if (!autdInfoFile.exists()) autdInfoFile.createNewFile()
+            
+            RootShellHelper.executeCmd("chmod 666 ${autdInfoFile.absolutePath}")
+            RootShellHelper.executeCmd("chmod -R 777 ${context.filesDir.absolutePath}/autd")
+            
             RootShellHelper.executeCmd("chmod +x $executablePath")
             
-            RootShellHelper.executeCmd("pkill -9 $DAEMON_FILENAME; killall -9 $DAEMON_FILENAME")
-            kotlinx.coroutines.delay(300)
+            val shouldEnableBattmon = prefs.getBoolean("battery_monitor_service", true)
+            var args = if (shouldEnableBattmon) "--battery-logger $batteryLogPath " else ""
             
-            var args = "--battery-logger $batteryLogPath"
             if (shouldEnableAutd) {
-                args = "--enable-autd $args"
+                args += "--enable-autd"
+            } else {
+                args += "--disable-autd"
             }
             
-            val startCmd = "nohup $executablePath $args > /dev/null 2>&1 &"
+            val startCmd = "cd ${context.filesDir.absolutePath} && nohup $executablePath $args > /dev/null 2>&1 &"
             if (RootShellHelper.executeCmd(startCmd)) {
                 kotlinx.coroutines.delay(200)
-                withContext(Dispatchers.Main) {
-                    val message = if (shouldEnableAutd) "xAozora Daemon Started" else "xAozora Daemon Started (AUTD Disabled)"
-                    android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
-                }
             }
             
             true

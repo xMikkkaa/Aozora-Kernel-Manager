@@ -1,6 +1,9 @@
 package com.xaozora.manager.ui.screens.home
 
+import android.content.Context
+import android.graphics.BitmapFactory
 import android.graphics.BlurMaskFilter
+import android.net.Uri
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.AnimatedContent
@@ -79,6 +82,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
@@ -117,6 +121,12 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val prefs = remember { context.getSharedPreferences("aozora_prefs", Context.MODE_PRIVATE) }
+    
+    val customBannerEnabled by remember { mutableStateOf(prefs.getBoolean("custom_banner_enabled", false)) }
+    val bannerUri by remember { mutableStateOf(prefs.getString("banner_uri", null)) }
+    var bannerBias by remember { mutableStateOf(prefs.getFloat("banner_bias", 0.5f)) }
+
     var systemInfo by remember { mutableStateOf<SystemInfo?>(null) }
     var isDaemonRunning by remember { mutableStateOf(false) }
     var isAutdAvailable by remember { mutableStateOf(false) }
@@ -246,7 +256,12 @@ fun HomeScreen(
         ) {
             Spacer(modifier = Modifier.padding(WindowInsets.statusBars.asPaddingValues()))
             Spacer(modifier = Modifier.height(16.dp))
-            HeroCard(deviceModel = info.model, hazeState = hazeState)
+            HeroCard(
+                deviceModel = info.model, 
+                hazeState = hazeState,
+                customBannerUri = if (customBannerEnabled) bannerUri else null,
+                bannerBias = bannerBias
+            )
     
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -483,7 +498,8 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HeroCard(deviceModel: String, hazeState: HazeState) {
+private fun HeroCard(deviceModel: String, hazeState: HazeState, customBannerUri: String? = null, bannerBias: Float = 0.5f) {
+    val context = LocalContext.current
     val infiniteTransition = rememberInfiniteTransition(label = "hero_border")
     val angle by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -529,17 +545,39 @@ private fun HeroCard(deviceModel: String, hazeState: HazeState) {
         shape = RoundedCornerShape(20.dp)
     ) {
         Box(modifier = Modifier.fillMaxWidth().height(160.dp)) {
-            Image(
-                painter = painterResource(id = R.drawable.kai), 
-                contentDescription = "Aozora Logo",
-                contentScale = ContentScale.Fit,
-                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(MaterialTheme.colorScheme.primary),
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .size(180.dp)
-                    .offset(x = 20.dp, y = 30.dp)
-                    .alpha(0.1f)
-            )
+            if (customBannerUri != null) {
+                val bitmap = remember(customBannerUri) {
+                    try {
+                        val stream = context.contentResolver.openInputStream(Uri.parse(customBannerUri))
+                        BitmapFactory.decodeStream(stream)
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = "Custom Banner",
+                        contentScale = ContentScale.Crop,
+                        alignment = androidx.compose.ui.BiasAlignment(0f, (bannerBias * 2f) - 1f),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .alpha(0.2f)
+                    )
+                }
+            } else {
+                Image(
+                    painter = painterResource(id = R.drawable.kai), 
+                    contentDescription = "Aozora Logo",
+                    contentScale = ContentScale.Fit,
+                    colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(MaterialTheme.colorScheme.primary),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(180.dp)
+                        .offset(x = 20.dp, y = 30.dp)
+                        .alpha(0.1f)
+                )
+            }
             Column(
                 modifier = Modifier
                     .fillMaxSize()

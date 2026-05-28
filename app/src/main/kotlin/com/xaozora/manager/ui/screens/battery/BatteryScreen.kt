@@ -338,7 +338,15 @@ fun BatteryOptionTab(hazeState: HazeState, resetPercentage: Float, onShowPercent
             checked = monitorService,
             hazeState = hazeState
         ) {
-            monitorService = it; savePref("battery_monitor_service", it)
+            monitorService = it
+            savePref("battery_monitor_service", it)
+            coroutineScope.launch(Dispatchers.IO) {
+                com.xaozora.manager.core.utils.NativeDaemonManager.extractAndStartDaemon(context)
+                withContext(Dispatchers.Main) {
+                    val msg = if (it) "xAozora Daemon (BATTMON) Started" else "xAozora Daemon (BATTMON) Stopped"
+                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
         }
 
         OptionToggleCard(

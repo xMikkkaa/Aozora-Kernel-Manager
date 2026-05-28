@@ -1,12 +1,17 @@
 package com.xaozora.manager.ui.screens.settings
 
 import android.content.Context
+import android.graphics.BitmapFactory
+import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,6 +23,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.rounded.AutoMode
@@ -29,11 +36,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
+import com.xaozora.manager.core.shell.RootShellHelper
 import com.xaozora.manager.core.utils.NativeDaemonManager
 import com.xaozora.manager.ui.components.GlassCard
 import com.xaozora.manager.ui.screens.about.AboutScreen
@@ -43,6 +53,8 @@ import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
 
 @Composable
 fun SettingsScreen(
@@ -57,22 +69,66 @@ fun SettingsScreen(
     val currentTheme by themeManager.themeMode.collectAsState()
     
     var autdEnabled by remember { mutableStateOf(prefs.getBoolean("autd_enabled", true)) }
+    var customBannerEnabled by remember { mutableStateOf(prefs.getBoolean("custom_banner_enabled", false)) }
+    var bannerUri by remember { mutableStateOf(prefs.getString("banner_uri", null)) }
+    var bannerBias by remember { mutableStateOf(prefs.getFloat("banner_bias", 0.5f)) }
     var showAbout by remember { mutableStateOf(false) }
     var awakeMethod by remember { mutableStateOf("") }
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { sourceUri ->
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val bannerDir = File(context.filesDir, "banners")
+                    if (!bannerDir.exists()) bannerDir.mkdirs()
+                    
+                    bannerDir.listFiles()?.forEach { it.delete() }
+                    
+                    val fileName = "custom_banner_${System.currentTimeMillis()}.jpg"
+                    val destFile = File(bannerDir, fileName)
+                    
+                    context.contentResolver.openInputStream(sourceUri)?.use { input ->
+                        FileOutputStream(destFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    
+                    withContext(Dispatchers.Main) {
+                        val newUri = Uri.fromFile(destFile).toString()
+                        bannerUri = newUri
+                        prefs.edit { putString("banner_uri", newUri) }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
 
     LaunchedEffect(autdEnabled) {
         if (autdEnabled) {
             while(true) {
                 withContext(Dispatchers.IO) {
                     try {
-                        val file = java.io.File("/data/data/com.xaozora.manager/files/autd/autd_awake_method.info")
-                        val content = if (file.exists()) file.readText().trim() else ""
-                        withContext(Dispatchers.Main) { awakeMethod = content }
+                        val file = java.io.File(context.filesDir, "autd/autd_awake_method.info")
+                        var content = ""
+                        content = try {
+                            file.readText().trim()
+                        } catch (e: Exception) {
+                            RootShellHelper.executeCmdAndGetOutput("cat '${file.absolutePath}'").trim()
+                        }
+                        if (content.isNotBlank()) {
+                            withContext(Dispatchers.Main) { awakeMethod = content }
+                        }
                     } catch (e: Exception) {
                     }
                 }
                 kotlinx.coroutines.delay(2000)
             }
+        } else {
+            awakeMethod = ""
         }
     }
 
@@ -118,7 +174,7 @@ fun SettingsScreen(
                             NativeDaemonManager.extractAndStartDaemon(context, newVal)
                             scope.launch {
                                 snackbarHostState.showSnackbar(
-                                    if (newVal) "xAozora Daemon (AUTD) Started" else "xAozora Daemon (AUTD Disabled)"
+                                    if (newVal) "Starting AUTD..." else "Stopping AUTD..."
                                 )
                             }
                         }
@@ -145,6 +201,146 @@ fun SettingsScreen(
                     }
                 )
                 
+                Spacer(modifier = Modifier.height(16.dp))
+
+                SettingsToggleCard(
+                    title = "Custom Banner Image",
+                    subtitle = "Use a custom image for the Home screen banner",
+                    icon = Icons.Outlined.Image,
+                    checked = customBannerEnabled,
+                    hazeState = hazeState,
+                    onCheckedChange = { newVal ->
+                        customBannerEnabled = newVal
+                        prefs.edit { putBoolean("custom_banner_enabled", newVal) }
+                    },
+                    expandableContent = {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 16.dp)
+                                .clickable { launcher.launch("image/*") }
+                        ) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.weight(1f).clickable { launcher.launch("image/*") },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Banner Source",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = if (bannerUri == null) "Not set" else "Tap to change image",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    
+                                    Box(
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (bannerUri != null) {
+                                            val bitmap = remember(bannerUri) {
+                                                try {
+                                                    val uri = Uri.parse(bannerUri!!)
+                                                    if (uri.scheme == "file") {
+                                                        BitmapFactory.decodeFile(uri.path)
+                                                    } else {
+                                                        val stream = context.contentResolver.openInputStream(uri)
+                                                        BitmapFactory.decodeStream(stream)
+                                                    }
+                                                } catch (e: Exception) {
+                                                    null
+                                                }
+                                            }
+                                            if (bitmap != null) {
+                                                Image(
+                                                    bitmap = bitmap.asImageBitmap(),
+                                                    contentDescription = null,
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    contentScale = ContentScale.Crop
+                                                )
+                                            } else {
+                                                Icon(Icons.Outlined.Image, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                                            }
+                                        } else {
+                                            Icon(Icons.Outlined.Image, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                                        }
+                                    }
+                                }
+
+                                if (bannerUri != null) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    IconButton(
+                                        onClick = {
+                                            val uri = Uri.parse(bannerUri!!)
+                                            if (uri.scheme == "file") {
+                                                File(uri.path!!).delete()
+                                            }
+                                            bannerUri = null
+                                            prefs.edit { remove("banner_uri") }
+                                        }
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Delete,
+                                            contentDescription = "Remove banner",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (bannerUri != null) {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Column {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = "Image Focus (Vertical)",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "${(bannerBias * 100).toInt()}%",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    Slider(
+                                        value = bannerBias,
+                                        onValueChange = { 
+                                            bannerBias = it
+                                            prefs.edit { putFloat("banner_bias", it) }
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Text(
+                                        text = "Adjust which part of the image is visible in the banner",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                )
+
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Text("App", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))

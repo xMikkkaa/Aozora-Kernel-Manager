@@ -39,7 +39,8 @@ object AppManagerUtils {
 
     suspend fun getConfiguredApps(context: Context): List<ConfiguredApp> = withContext(Dispatchers.IO) {
         val installedApps = getInstalledApps(context)
-        val appListStr = RootShellHelper.readSystemFile("/data/data/com.xaozora.manager/files/autd/applist")
+        val appListFile = java.io.File(context.filesDir, "autd/applist")
+        val appListStr = RootShellHelper.readSystemFile(appListFile.absolutePath)
         
         if (appListStr.isBlank()) return@withContext emptyList()
         

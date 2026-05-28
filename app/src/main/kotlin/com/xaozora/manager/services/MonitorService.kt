@@ -270,10 +270,12 @@ class MonitorService : Service() {
                         try {
                             RootShellHelper.executeCmd("dumpsys batterystats --reset")
                             
-                            val daemonPath = "${filesDir.path}/xaozora_daemon"
                             val battmonDir = java.io.File(filesDir, "battmon")
                             val batteryLogPath = java.io.File(battmonDir, "battery_logger.jsonl").absolutePath
-                            RootShellHelper.executeCmd("$daemonPath --reset-stats --battery-logger $batteryLogPath")
+                            
+                            val autdArg = if (prefs.getBoolean("autd_enabled", true)) "--enable-autd" else "--disable-autd"
+                            val battmonArg = if (prefs.getBoolean("battery_monitor_service", true)) "--battery-logger $batteryLogPath" else ""
+                            RootShellHelper.executeCmd("cd ${filesDir.absolutePath} && nohup ./xaozora_daemon $autdArg --reset-stats $battmonArg > /dev/null 2>&1 &")
                             
                             Log.d(TAG, "Battery stats reset via daemon on plug-in")
                         } catch (e: Exception) {

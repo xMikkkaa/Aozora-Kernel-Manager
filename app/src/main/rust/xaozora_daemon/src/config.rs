@@ -18,16 +18,16 @@ use std::env;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 
-pub const AUTD_DIR: &str = "/data/data/com.xaozora.manager/files/autd";
-pub const BATTMON_DIR: &str = "/data/data/com.xaozora.manager/files/battmon";
-pub const AUTD_BASE_MODE_PATH: &str = "/data/data/com.xaozora.manager/files/autd/autd_base_mode";
-pub const FILELIST_PATH: &str = "/data/data/com.xaozora.manager/files/autd/applist";
-pub const AUTD_STATUS_PATH: &str = "/data/data/com.xaozora.manager/files/autd/autd_status";
-pub const AUTD_OPT_ALLOW_PATH: &str = "/data/data/com.xaozora.manager/files/autd/autd_opt_allow";
-pub const AUTD_PS_STATE_PATH: &str = "/data/data/com.xaozora.manager/files/autd/autd_ps_state";
-pub const AUTD_IDLE_CHARGING_PATH: &str = "/data/data/com.xaozora.manager/files/autd/autd_idle_charging";
-pub const AUTD_SYSFS_BACKUP_PATH: &str = "/data/data/com.xaozora.manager/files/autd/autd_sysfs_backup";
-pub const AUTD_AWAKE_DEBUG_LOG: &str = "/data/data/com.xaozora.manager/files/autd/autd_awake_method.info";
+pub const AUTD_DIR: &str = "autd";
+pub const BATTMON_DIR: &str = "battmon";
+pub const AUTD_BASE_MODE_PATH: &str = "autd/autd_base_mode";
+pub const FILELIST_PATH: &str = "autd/applist";
+pub const AUTD_STATUS_PATH: &str = "autd/autd_status";
+pub const AUTD_OPT_ALLOW_PATH: &str = "autd/autd_opt_allow";
+pub const AUTD_PS_STATE_PATH: &str = "autd/autd_ps_state";
+pub const AUTD_IDLE_CHARGING_PATH: &str = "autd/autd_idle_charging";
+pub const AUTD_SYSFS_BACKUP_PATH: &str = "autd/autd_sysfs_backup";
+pub const AUTD_AWAKE_DEBUG_LOG: &str = "autd/autd_awake_method.info";
 
 pub fn setup_android_env() {
     unsafe {
