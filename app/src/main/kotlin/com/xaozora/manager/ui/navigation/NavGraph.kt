@@ -54,6 +54,7 @@ fun AozoraNavGraph(
     isAutdAvailable: Boolean,
     modifier: Modifier = Modifier,
     onAddClick: (() -> Unit) -> Unit = {},
+    onDevModeClick: ((onClick: () -> Unit, isDevMode: Boolean) -> Unit) = { _, _ -> },
     onNavigateToBattery: () -> Unit = {}
 ) {
     HorizontalPager(
@@ -63,7 +64,11 @@ fun AozoraNavGraph(
     ) { page ->
         when (screens.getOrNull(page)) {
             Screen.Home -> HomeScreen(hazeState = hazeState, onNavigateToBattery = onNavigateToBattery)
-            Screen.Tuning -> TuningScreen(hazeState = hazeState, snackbarHostState = snackbarHostState)
+            Screen.Tuning -> TuningScreen(
+                hazeState = hazeState, 
+                snackbarHostState = snackbarHostState,
+                onDevModeClickProvider = onDevModeClick
+            )
             Screen.Tweaks -> TweaksScreen(
                 hazeState = hazeState, 
                 snackbarHostState = snackbarHostState,

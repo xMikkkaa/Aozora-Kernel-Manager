@@ -82,7 +82,9 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            @Suppress("DEPRECATION")
             window.isStatusBarContrastEnforced = false
+            @Suppress("DEPRECATION")
             window.isNavigationBarContrastEnforced = false
         }
         
@@ -214,6 +216,8 @@ class MainActivity : ComponentActivity() {
                     val batteryHazeState = remember { HazeState() }
                     val snackbarHostState = remember { SnackbarHostState() }
                     var onAddClickAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+                    var onDevModeClickAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+                    var isDevMode by remember { mutableStateOf(false) }
                     var showBatteryScreen by remember { mutableStateOf(false) }
 
                     Box(
@@ -222,60 +226,7 @@ class MainActivity : ComponentActivity() {
                         Scaffold(
                             modifier = Modifier.fillMaxSize(),
                             containerColor = Color.Transparent,
-                            contentWindowInsets = WindowInsets(0, 0, 0, 0),
-                            snackbarHost = {
-                                SnackbarHost(
-                                    hostState = snackbarHostState,
-                                    modifier = Modifier.padding(bottom = 0.dp)
-                                ) { data ->
-                                    val colorScheme = MaterialTheme.colorScheme
-                                    val isError = data.visuals.message.contains("Failed", ignoreCase = true) ||
-                                            data.visuals.message.contains("Error", ignoreCase = true)
-
-                                    val glassStyle = remember(colorScheme, isError) {
-                                        HazeStyle(
-                                            blurRadius = 25.dp,
-                                            noiseFactor = 0.1f,
-                                            tints = listOf(
-                                                HazeTint(
-                                                    if (isError) colorScheme.errorContainer.copy(alpha = 0.3f)
-                                                    else colorScheme.primaryContainer.copy(alpha = 0.3f)
-                                                )
-                                            )
-                                        )
-                                    }
-
-                                    Box(
-                                        modifier = Modifier
-                                            .padding(16.dp)
-                                            .padding(bottom = 110.dp)
-                                            .clip(RoundedCornerShape(50))
-                                            .hazeEffect(
-                                                state = hazeState,
-                                                style = glassStyle
-                                            )
-                                            .background(Color.Transparent)
-                                            .border(
-                                                width = 1.dp,
-                                                color = if (isError) colorScheme.error.copy(alpha = 0.5f)
-                                                else colorScheme.primary.copy(alpha = 0.5f),
-                                                shape = RoundedCornerShape(50)
-                                            )
-                                            .padding(horizontal = 24.dp, vertical = 14.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = data.visuals.message,
-                                            color = if (isError) colorScheme.onErrorContainer
-                                            else colorScheme.onPrimaryContainer,
-                                            style = MaterialTheme.typography.bodyMedium.copy(
-                                                fontWeight = androidx.compose.ui.text.font.FontWeight.W600,
-                                                letterSpacing = 0.2.sp
-                                            )
-                                        )
-                                    }
-                                }
-                            }
+                            contentWindowInsets = WindowInsets(0, 0, 0, 0)
                         ) { innerPadding ->
                             AozoraNavGraph(
                                 screens = screens,
@@ -284,6 +235,10 @@ class MainActivity : ComponentActivity() {
                                 snackbarHostState = snackbarHostState,
                                 isAutdAvailable = isAutdAvailable,
                                 onAddClick = { action -> onAddClickAction = action },
+                                onDevModeClick = { action, devMode ->
+                                    onDevModeClickAction = action
+                                    isDevMode = devMode
+                                },
                                 onNavigateToBattery = { showBatteryScreen = true },
                                 modifier = Modifier
                                     .hazeSource(state = hazeState)
@@ -307,8 +262,64 @@ class MainActivity : ComponentActivity() {
                                 hazeState = hazeState,
                                 onAddClick = if (screens.getOrNull(pagerState.currentPage) == Screen.AppManager) {
                                     onAddClickAction
-                                } else null
+                                } else null,
+                                onDevModeClick = if (screens.getOrNull(pagerState.currentPage) == Screen.Tuning) {
+                                    onDevModeClickAction
+                                } else null,
+                                isDevMode = isDevMode
                             )
+                        }
+
+                        SnackbarHost(
+                            hostState = snackbarHostState,
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                        ) { data ->
+                            val colorScheme = MaterialTheme.colorScheme
+                            val isError = data.visuals.message.contains("Failed", ignoreCase = true) ||
+                                    data.visuals.message.contains("Error", ignoreCase = true)
+
+                            val glassStyle = remember(colorScheme, isError) {
+                                HazeStyle(
+                                    blurRadius = 25.dp,
+                                    noiseFactor = 0.1f,
+                                    tints = listOf(
+                                        HazeTint(
+                                            if (isError) colorScheme.errorContainer.copy(alpha = 0.3f)
+                                            else colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                        )
+                                    )
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .padding(16.dp)
+                                    .padding(bottom = 110.dp)
+                                    .clip(RoundedCornerShape(50))
+                                    .hazeEffect(
+                                        state = hazeState,
+                                        style = glassStyle
+                                    )
+                                    .background(Color.Transparent)
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (isError) colorScheme.error.copy(alpha = 0.5f)
+                                        else colorScheme.primary.copy(alpha = 0.5f),
+                                        shape = RoundedCornerShape(50)
+                                    )
+                                    .padding(horizontal = 24.dp, vertical = 14.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = data.visuals.message,
+                                    color = if (isError) colorScheme.onErrorContainer
+                                    else colorScheme.onPrimaryContainer,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.W600,
+                                        letterSpacing = 0.2.sp
+                                    )
+                                )
+                            }
                         }
 
                         if (showBatteryScreen) {

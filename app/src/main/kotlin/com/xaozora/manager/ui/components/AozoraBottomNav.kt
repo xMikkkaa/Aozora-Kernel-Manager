@@ -30,6 +30,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -65,6 +67,8 @@ fun AozoraBottomNav(
     hazeState: HazeState,
     modifier: Modifier = Modifier,
     onAddClick: (() -> Unit)? = null,
+    onDevModeClick: (() -> Unit)? = null,
+    isDevMode: Boolean = false,
 ) {
     val density = LocalDensity.current
 
@@ -109,6 +113,37 @@ fun AozoraBottomNav(
                     imageVector = Icons.Rounded.Add,
                     contentDescription = "Add",
                     tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = onDevModeClick != null,
+            enter = fadeIn() + slideInVertically { it / 2 },
+            exit = fadeOut() + slideOutVertically { it / 2 },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 40.dp, bottom = 110.dp)
+                .navigationBarsPadding()
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .hazeEffect(state = hazeState, style = strongBlurStyle)
+                    .border(
+                        width = 1.2.dp,
+                        color = if (isDevMode) MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    .clickable { onDevModeClick?.invoke() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isDevMode) Icons.Rounded.Close else Icons.Rounded.Edit,
+                    contentDescription = if (isDevMode) "Exit Developer Mode" else "Enter Developer Mode",
+                    tint = if (isDevMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                 )
             }
         }

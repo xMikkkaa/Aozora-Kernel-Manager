@@ -38,6 +38,8 @@ import androidx.compose.material.icons.rounded.Balance
 import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.CleaningServices
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.RocketLaunch
@@ -75,6 +77,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.navigationBarsPadding
 import com.xaozora.manager.core.shell.RootShellHelper
 import com.xaozora.manager.ui.components.GlassCard
+import com.xaozora.manager.ui.components.ProfileEditorDialog
 import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -102,6 +105,7 @@ val profiles = listOf(
 fun TuningScreen(
     hazeState: HazeState,
     snackbarHostState: SnackbarHostState,
+    onDevModeClickProvider: ((onClick: () -> Unit, isDevMode: Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -112,6 +116,30 @@ fun TuningScreen(
     val profileAvailability = remember { mutableStateMapOf<String, Boolean>() }
     var processingProfile by remember { mutableStateOf<String?>(null) }
     var activeProfileId by remember { mutableStateOf<String?>(null) }
+
+    var isDeveloperMode by remember { mutableStateOf(false) }
+    var hasModifiedProfiles by remember { mutableStateOf(false) }
+    var editingProfile by remember { mutableStateOf<TuningProfile?>(null) }
+    var editingProfileContent by remember { mutableStateOf("") }
+    var moduleBasePath by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(onDevModeClickProvider, isDeveloperMode, moduleName) {
+        if (moduleName != null) {
+            onDevModeClickProvider?.invoke({
+                if (isDeveloperMode) {
+                    isDeveloperMode = false
+                    if (hasModifiedProfiles) {
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Profile modified. Please reboot to apply changes.")
+                        }
+                    }
+                } else {
+                    isDeveloperMode = true
+                    hasModifiedProfiles = false
+                }
+            }, isDeveloperMode)
+        }
+    }
 
     val infiniteTransition = rememberInfiniteTransition(label = "profile_shadow")
     val angle by infiniteTransition.animateFloat(
@@ -148,10 +176,16 @@ fun TuningScreen(
             val autdExists = RootShellHelper.checkFileExists("${context.filesDir.path}/xaozora_daemon")
             isAutdAvailable = autdExists && prefs.getBoolean("autd_enabled", true)
 
-            val propOutput = RootShellHelper.executeCmdAndGetOutput(
-                "cat \$(grep -il 'id=.*aozora' /data/adb/modules/*/module.prop 2>/dev/null | head -n 1)"
-            )
+            val modulePropPath = RootShellHelper.executeCmdAndGetOutput(
+                "grep -il 'id=.*aozora' /data/adb/modules/*/module.prop 2>/dev/null | head -n 1"
+            ).trim()
+            
+            val propOutput = if (modulePropPath.isNotEmpty()) {
+                RootShellHelper.executeCmdAndGetOutput("cat $modulePropPath")
+            } else ""
+            
             if (propOutput.isNotBlank() && propOutput.contains("aozora", ignoreCase = true)) {
+                moduleBasePath = modulePropPath.substringBeforeLast("/") + "/system/bin"
                 var mName = "Aozora Module"
                 var mVersion = "Unknown"
                 propOutput.lines().forEach { line ->
@@ -171,18 +205,22 @@ fun TuningScreen(
         isLoading = false
     }
 
-    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
 
     LaunchedEffect(isAutdAvailable, lifecycleState) {
-        if (isAutdAvailable && lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+        if (lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
             withContext(Dispatchers.IO) {
-                while (true) {
-                    try {
-                        val status = java.io.File(context.filesDir, "autd/autd_status").readText().trim()
-                        if (status.isNotBlank()) activeProfileId = status
-                    } catch (e: Exception) {}
-                    delay(1000)
+                if (isAutdAvailable) {
+                    while (true) {
+                        try {
+                            val status = java.io.File(context.filesDir, "autd/autd_base_mode").readText().trim()
+                            if (status.isNotBlank()) activeProfileId = status
+                        } catch (e: Exception) {}
+                        delay(1000)
+                    }
+                } else {
+                    activeProfileId = prefs.getString("manual_active_profile", null)
                 }
             }
         }
@@ -217,11 +255,12 @@ fun TuningScreen(
                         modifier = Modifier.padding(bottom = 24.dp)
                     )
 
+
                     moduleName?.let { name ->
                         GlassCard(
                             hazeState = hazeState,
                             shape = RoundedCornerShape(20.dp),
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
+                            modifier = Modifier.fillMaxWidth().padding(bottom = if (isDeveloperMode) 12.dp else 24.dp)
                         ) {
                             Row(
                                 modifier = Modifier.padding(20.dp),
@@ -259,6 +298,49 @@ fun TuningScreen(
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary
                                 )
+                            }
+                        }
+
+                        if (isDeveloperMode) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 24.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f),
+                                        RoundedCornerShape(16.dp)
+                                    )
+                                    .border(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.3f),
+                                        RoundedCornerShape(16.dp)
+                                    )
+                                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Rounded.Edit,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.tertiary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = "Developer Mode",
+                                            style = MaterialTheme.typography.labelLarge.copy(
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.tertiary
+                                            )
+                                        )
+                                        Text(
+                                            text = "Tap a profile card to edit its shell script",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -327,34 +409,49 @@ fun TuningScreen(
                         )
                         .clip(RoundedCornerShape(28.dp))
                         .clickable(enabled = isAvailable && processingProfile == null) {
-                            scope.launch(Dispatchers.IO) {
-                                processingProfile = profile.id
-                                try {
-                                    delay(600) 
-                                    if (profile.id == "cachecleaner") {
-                                        RootShellHelper.executeCmd("/system/bin/cachecleaner")
-                                    } else if (isAutdAvailable) {
-                                        val autdDir = "${context.filesDir.absolutePath}/autd"
-                                        val writeCmd = "rm -f $autdDir/autd_base_mode; echo -n '${profile.id}' > $autdDir/autd_base_mode"
-                                        
-                                        if (RootShellHelper.executeCmd(writeCmd)) {
-                                            android.util.Log.d("TuningScreen", "Successfully wrote profile ${profile.id} via root shell")
-                                        } else {
-                                            android.util.Log.e("TuningScreen", "Failed to write profile via root shell")
-                                        }
-                                    } else {
-                                        RootShellHelper.executeCmd("/system/bin/${profile.id}")
+                            if (isDeveloperMode && profile.id != "cachecleaner") {
+                                moduleBasePath?.let { basePath ->
+                                    scope.launch(Dispatchers.IO) {
+                                        val content = RootShellHelper.executeCmdAndGetOutput("cat $basePath/${profile.id}")
+                                        editingProfileContent = content
+                                        editingProfile = profile
                                     }
-                                } catch (e: Exception) {
-                                    android.util.Log.e("TuningScreen", "Error applying profile", e)
-                                } finally {
-                                    processingProfile = null
                                 }
-
-                                scope.launch {
-                                    snackbarHostState.showSnackbar(
-                                        message = if (profile.id == "cachecleaner") "Cache cleaned successfully!" else "Profile ${profile.name} applied"
-                                    )
+                            } else if (profile.id == "cachecleaner") {
+                                scope.launch(Dispatchers.IO) {
+                                    processingProfile = profile.id
+                                    try {
+                                        delay(600)
+                                        RootShellHelper.executeCmd("/system/bin/cachecleaner")
+                                    } catch (e: Exception) {} finally {
+                                        processingProfile = null
+                                    }
+                                    scope.launch { snackbarHostState.showSnackbar("Cache cleaned successfully!") }
+                                }
+                            } else if (isAutdAvailable) {
+                                scope.launch(Dispatchers.IO) {
+                                    val autdDir = "${context.filesDir.absolutePath}/autd"
+                                    val writeCmd = "rm -f $autdDir/autd_base_mode; echo -n '${profile.id}' > $autdDir/autd_base_mode"
+                                    
+                                    if (RootShellHelper.executeCmd(writeCmd)) {
+                                        activeProfileId = profile.id
+                                        scope.launch { snackbarHostState.showSnackbar("Profile ${profile.name} applied") }
+                                    } else {
+                                        scope.launch { snackbarHostState.showSnackbar("Failed to write profile via root shell") }
+                                    }
+                                }
+                            } else {
+                                scope.launch(Dispatchers.IO) {
+                                    processingProfile = profile.id
+                                    try {
+                                        delay(600)
+                                        RootShellHelper.executeCmd("/system/bin/${profile.id}")
+                                        activeProfileId = profile.id
+                                        prefs.edit().putString("manual_active_profile", profile.id).apply()
+                                    } catch (e: Exception) {} finally {
+                                        processingProfile = null
+                                    }
+                                    scope.launch { snackbarHostState.showSnackbar("Profile ${profile.name} applied") }
                                 }
                             }
                         }
@@ -394,13 +491,13 @@ fun TuningScreen(
                                     color = if (isAvailable) colorScheme.onSurfaceVariant else colorScheme.error
                                 )
                             )
-                            if (isAvailable && profile.id != "cachecleaner" && isAutdAvailable) {
+                            if (isAvailable && profile.id != "cachecleaner") {
                                 Text(
-                                    text = if (isProcessing) "Applying..." else if (isActive) "ACTIVE" else "Tap to activate",
+                                    text = if (isDeveloperMode) "Tap to edit" else if (isProcessing) "Applying..." else if (isActive) "ACTIVE" else if (isAutdAvailable) "Tap to activate" else "",
                                     style = MaterialTheme.typography.labelSmall.copy(
-                                        fontFamily = if (isActive) FontFamily.Monospace else null,
-                                        color = if (isActive || isProcessing) colorScheme.primary else colorScheme.outline,
-                                        fontWeight = if (isActive || isProcessing) FontWeight.Bold else FontWeight.Normal
+                                        fontFamily = if (isActive && !isDeveloperMode) FontFamily.Monospace else null,
+                                        color = if (isDeveloperMode) colorScheme.tertiary else if (isActive || isProcessing) colorScheme.primary else colorScheme.outline,
+                                        fontWeight = if (isDeveloperMode || isActive || isProcessing) FontWeight.Bold else FontWeight.Normal
                                     )
                                 )
                             }
@@ -411,9 +508,34 @@ fun TuningScreen(
             }
 
             item(span = { GridItemSpan(maxLineSpan) }) {
-                Spacer(modifier = Modifier.height(140.dp))
+                Spacer(modifier = Modifier.height(220.dp))
                 Spacer(modifier = Modifier.navigationBarsPadding())
             }
         }
+    }
+
+    editingProfile?.let { profile ->
+        ProfileEditorDialog(
+            hazeState = hazeState,
+            profileName = profile.name,
+            profileId = profile.id,
+            initialContent = editingProfileContent,
+            onDismiss = { editingProfile = null },
+            onSave = { newContent ->
+                moduleBasePath?.let { basePath ->
+                    scope.launch(Dispatchers.IO) {
+                        val escaped = newContent.replace("'", "'\"'\"'")
+                        val writeCmd = "printf '%s' '$escaped' > $basePath/${profile.id}"
+                        if (RootShellHelper.executeCmd(writeCmd)) {
+                            hasModifiedProfiles = true
+                            scope.launch { snackbarHostState.showSnackbar("Profile ${profile.name} saved successfully!") }
+                        } else {
+                            scope.launch { snackbarHostState.showSnackbar("Failed to save profile ${profile.name}") }
+                        }
+                    }
+                }
+                editingProfile = null
+            }
+        )
     }
 }
