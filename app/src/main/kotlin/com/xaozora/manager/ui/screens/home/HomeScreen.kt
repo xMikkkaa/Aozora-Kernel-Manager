@@ -149,7 +149,7 @@ fun HomeScreen(
     var batteryCurrent by remember { mutableStateOf("-272mA") }
     var batteryTemp by remember { mutableStateOf("33.3°C") }
 
-    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
 
     LaunchedEffect(Unit) {
@@ -187,7 +187,6 @@ fun HomeScreen(
         }
     }
 
-    val hardwarePoller = remember { com.xaozora.manager.core.utils.HardwarePoller() }
     var showSystemInfoDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
     
     var showCpuControlDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
@@ -218,7 +217,7 @@ fun HomeScreen(
     LaunchedEffect(lifecycleState) {
         if (lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
             while (true) {
-                val metrics = hardwarePoller.poll()
+                val metrics = com.xaozora.manager.core.utils.SystemInfoUtils.pollHardware()
                 cpuLoad = metrics.cpuLoad
                 coreFreqs = metrics.coreFreqs
                 coreProgress = metrics.coreProgress

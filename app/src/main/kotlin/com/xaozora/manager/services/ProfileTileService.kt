@@ -8,6 +8,7 @@ import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.view.WindowManager
+import com.google.gson.Gson
 import com.xaozora.manager.core.shell.RootShellHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -16,6 +17,9 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 class ProfileTileService : TileService() {
+    init {
+        System.loadLibrary("native")
+    }
 
     private val profiles = listOf(
         Pair("powersave", "Power Save"),
@@ -24,6 +28,12 @@ class ProfileTileService : TileService() {
         Pair("gaming2", "Gaming 2"),
         Pair("performance", "Performance")
     )
+
+    private val gson = Gson()
+
+    private external fun getActiveProfile(): String
+    private external fun getAvailableProfilesJson(): String
+    private external fun applyProfile(profileId: String)
 
     override fun onStartListening() {
         super.onStartListening()
@@ -37,7 +47,6 @@ class ProfileTileService : TileService() {
             val prefs = getSharedPreferences("aozora_prefs", MODE_PRIVATE)
             val autdEnabled = prefs.getBoolean("autd_enabled", true)
             val autdExists = RootShellHelper.checkFileExists("${filesDir.path}/xaozora_daemon")
-            
             val helperBindMounted = RootShellHelper.checkFileExists("/system/bin/balance")
             val isAvailable = autdEnabled && autdExists && helperBindMounted
             
@@ -45,14 +54,9 @@ class ProfileTileService : TileService() {
                 if (isAvailable) {
                     tile.state = Tile.STATE_ACTIVE
                     try {
-                        val statusFile = File(filesDir, "autd/autd_status")
-                        if (statusFile.exists() && statusFile.canRead()) {
-                            val activeId = statusFile.readText().trim()
-                            val activeProfile = profiles.find { it.first == activeId }
-                            tile.subtitle = activeProfile?.second ?: activeId
-                        } else {
-                            tile.subtitle = "Active"
-                        }
+                        val activeId = getActiveProfile()
+                        val activeProfile = profiles.find { it.first == activeId }
+                        tile.subtitle = activeProfile?.second ?: activeId
                     } catch (e: Exception) {
                         tile.subtitle = "Active"
                     }
@@ -78,12 +82,11 @@ class ProfileTileService : TileService() {
 
     private fun showProfileDialog() {
         CoroutineScope(Dispatchers.IO).launch {
+            val availableJson = getAvailableProfilesJson()
+            val availableProfilesRaw = gson.fromJson(availableJson, Array<String>::class.java)?.toList() ?: listOf()
+            
             val availableProfiles = profiles.filter {
-                if (it.first == "gaming" || it.first == "gaming2") {
-                    RootShellHelper.checkFileExists("/system/bin/${it.first}")
-                } else {
-                    true
-                }
+                availableProfilesRaw.contains(it.first)
             }
 
             withContext(Dispatchers.Main) {
@@ -96,10 +99,7 @@ class ProfileTileService : TileService() {
 
                 var currentId = "balance"
                 try {
-                    val statusFile = File(filesDir, "autd/autd_status")
-                    if (statusFile.exists() && statusFile.canRead()) {
-                        currentId = statusFile.readText().trim()
-                    }
+                    currentId = getActiveProfile()
                 } catch (e: Exception) {}
 
                 val primaryColor = try { 
@@ -133,7 +133,10 @@ class ProfileTileService : TileService() {
                         }
                         
                         layout.setOnClickListener {
-                            applyProfile(profileId)
+                            CoroutineScope(Dispatchers.IO).launch {
+                                applyProfile(profileId)
+                                updateTileState()
+                            }
                             dialog.dismiss()
                         }
                     } else {
@@ -163,24 +166,6 @@ class ProfileTileService : TileService() {
 
                 showDialog(dialog)
             }
-        }
-    }
-
-    private fun applyProfile(profileId: String) {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val autdDir = "${filesDir.absolutePath}/autd"
-                val writeCmd = "rm -f $autdDir/autd_base_mode; echo -n '$profileId' > $autdDir/autd_base_mode"
-                
-                if (RootShellHelper.executeCmd(writeCmd)) {
-                    android.util.Log.d("ProfileTileService", "Successfully wrote profile $profileId via root")
-                } else {
-                    android.util.Log.e("ProfileTileService", "Failed to write profile via root")
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-            updateTileState()
         }
     }
 }
