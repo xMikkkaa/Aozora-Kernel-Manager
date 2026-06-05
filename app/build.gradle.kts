@@ -14,6 +14,7 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.xaozora.manager"
+    ndkVersion = "27.0.12077973"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -34,9 +35,13 @@ android {
         //noinspection OldTargetApi
         targetSdk = 36
         versionCode = 2
-        versionName = "2.3.0"
+        versionName = "2.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            abiFilters.add("arm64-v8a")
+        }
     }
 
     buildTypes {
@@ -56,6 +61,13 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+    
+    sourceSets {
+        getByName("main") {
+            jniLibs.directories.clear()
+            jniLibs.directories.add("src/main/libs")
+        }
     }
 }
 
@@ -106,6 +118,20 @@ tasks.register<Exec>("buildRustDaemon") {
     outputs.file(rustOutputBinary)
 }
 
+tasks.register<Exec>("buildRustJni") {
+    group = "rust"
+    description = "Compiles the Rust xaozora_jni native library for Android targets"
+
+    workingDir = file("src/main/rust/xaozora_jni")
+    environment("ANDROID_NDK_HOME", ndkDir)
+
+    commandLine("cargo", "ndk", "-t", "arm64-v8a", "-o", "../../libs", "build", "--release")
+
+    inputs.dir(file("src/main/rust/xaozora_jni/src"))
+    inputs.file(file("src/main/rust/xaozora_jni/Cargo.toml"))
+    outputs.dir(file("src/main/libs"))
+}
+
 tasks.register<Copy>("copyRustDaemonToAssets") {
     group = "rust"
     description = "Copies the compiled Rust daemon binary to the Android assets folder"
@@ -123,6 +149,13 @@ afterEvaluate {
     }.configureEach {
         dependsOn("copyRustDaemonToAssets")
     }
+
+    tasks.matching {
+        it.name.matches(Regex("merge(Debug|Release)JniLibFolders")) ||
+        it.name.matches(Regex("pre(Debug|Release)Build"))
+    }.configureEach {
+        dependsOn("buildRustJni")
+    }
 }
 
 dependencies {
@@ -136,6 +169,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.compose.material.icons.extended)

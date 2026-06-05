@@ -18,6 +18,9 @@
 
 # Prevent R8 from obfuscating/stripping Gson model classes
 -keep class com.xaozora.manager.core.models.** { *; }
+-keep class com.xaozora.manager.core.network.** { *; }
+-keep class com.xaozora.manager.core.utils.** { *; }
+-keep class com.xaozora.manager.core.shell.** { *; }
 -keepattributes Signature
 -keepattributes *Annotation*
 -keep class sun.misc.Unsafe { *; }

@@ -1,0 +1,79 @@
+name: Auto APK Release
+
+on:
+  push:
+    branches:
+      - kotlin
+    paths:
+      - '.github/workflows/auto_release.yml'
+      - 'app/build.gradle.kts'
+      - 'app/release/app-release.apk'
+  workflow_dispatch:
+
+jobs:
+  auto-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all commit history for accurate changelog
+
+      - name: Extract versionName from build.gradle.kts
+        id: extract_version
+        run: |
+          VERSION_NAME=$(grep -E 'versionName\s*=\s*".*"' app/build.gradle.kts | sed -E 's/.*versionName\s*=\s*"([^"]+)".*/\1/')
+          echo "VERSION=v$VERSION_NAME" >> $GITHUB_ENV
+          echo "Extracted version: v$VERSION_NAME"
+
+      - name: Check if Tag Exists
+        id: check_tag
+        run: |
+          if git ls-remote --tags origin refs/tags/${{ env.VERSION }} | grep -q ${{ env.VERSION }}; then
+            echo "Tag ${{ env.VERSION }} already exists. Skipping release creation."
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Tag ${{ env.VERSION }} does not exist. Proceeding to create release."
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate Changelog
+        if: steps.check_tag.outputs.exists == 'false'
+        id: changelog
+        run: |
+          # Get the last tag, if any
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          echo "Generating changelog..."
+          if [ -z "$LAST_TAG" ]; then
+            # If no previous tags exist, just get the last 10 commits
+            git log -n 10 --pretty=format:"* %s" > changelog.txt
+          else
+            # Get commits since the last tag
+            git log ${LAST_TAG}..HEAD --pretty=format:"* %s" > changelog.txt
+          fi
+          
+          # Use EOF delimiter to handle multi-line strings in GITHUB_ENV
+          {
+            echo 'CHANGELOG<<EOF'
+            cat changelog.txt
+            echo
+            echo 'EOF'
+          } >> "$GITHUB_ENV"
+
+      - name: Create Release and Upload APK
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VERSION }}
+          name: Aozora Manager ${{ env.VERSION }}
+          body: |
+            ### What's New in ${{ env.VERSION }}
+            ${{ env.CHANGELOG }}
+          files: app/release/app-release.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
