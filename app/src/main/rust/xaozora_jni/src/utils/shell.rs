@@ -37,11 +37,33 @@ fn send_ipc_command(cmd: &str) -> Option<String> {
 }
 
 pub fn execute_cmd(cmd: &str) -> bool {
-    send_ipc_command(cmd).is_some()
+    if let Some(output) = send_ipc_command(cmd) {
+        if !output.starts_with("Error executing command:") {
+            return true;
+        }
+    }
+    
+    if let Ok(mut child) = std::process::Command::new("su").arg("-c").arg(cmd).spawn() {
+        if let Ok(status) = child.wait() {
+            return status.success();
+        }
+    }
+    false
 }
 
 pub fn execute_cmd_and_get_output(cmd: &str) -> String {
-    send_ipc_command(cmd).unwrap_or_default().trim().to_string()
+    if let Some(output) = send_ipc_command(cmd) {
+        if !output.starts_with("Error executing command:") {
+            return output.trim().to_string();
+        }
+    }
+    
+    if let Ok(output) = std::process::Command::new("su").arg("-c").arg(cmd).output() {
+        if let Ok(out_str) = String::from_utf8(output.stdout) {
+            return out_str.trim().to_string();
+        }
+    }
+    String::new()
 }
 
 pub fn read_system_file(path: &str) -> String {

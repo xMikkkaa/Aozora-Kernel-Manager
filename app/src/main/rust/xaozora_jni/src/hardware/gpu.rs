@@ -3,7 +3,7 @@ use jni::JNIEnv;
 use jni::objects::{JClass, JString};
 use jni::sys::jstring;
 
-use crate::shell::{read_system_file, execute_cmd, check_file_exists};
+use crate::utils::shell::{read_system_file, execute_cmd, check_file_exists};
 
 const BASE_PATH: &str = "/sys/kernel/gpu";
 const DEVFREQ_PATH: &str = "/sys/class/kgsl/kgsl-3d0/devfreq";

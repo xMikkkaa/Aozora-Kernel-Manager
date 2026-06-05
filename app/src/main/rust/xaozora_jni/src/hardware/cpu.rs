@@ -3,7 +3,7 @@ use jni::JNIEnv;
 use jni::objects::{JClass, JString};
 use jni::sys::jstring;
 
-use crate::shell::{read_system_file, execute_cmd};
+use crate::utils::shell::{read_system_file, execute_cmd};
 
 #[derive(Serialize, Deserialize)]
 pub struct CpuClusterConfig {

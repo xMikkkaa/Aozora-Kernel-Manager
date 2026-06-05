@@ -3,7 +3,7 @@ use jni::JNIEnv;
 use jni::objects::{JClass, JString};
 use jni::sys::jstring;
 
-use crate::shell::read_system_file;
+use crate::utils::shell::read_system_file;
 
 #[derive(Serialize, Deserialize)]
 pub struct AppInfoItem {

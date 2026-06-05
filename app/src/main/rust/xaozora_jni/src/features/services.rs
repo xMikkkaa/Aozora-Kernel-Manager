@@ -3,7 +3,7 @@ use jni::JNIEnv;
 use jni::objects::{JClass, JString};
 use jni::sys::jstring;
 
-use crate::shell::{read_system_file, execute_cmd, check_file_exists};
+use crate::utils::shell::{read_system_file, execute_cmd, check_file_exists};
 
 pub fn get_active_profile() -> String {
     let status_path = "/data/data/com.xaozora.manager/files/autd/autd_status";

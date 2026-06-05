@@ -4,7 +4,7 @@ use jni::objects::JClass;
 use jni::sys::jstring;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::shell::{read_system_file, execute_cmd_and_get_output};
+use crate::utils::shell::{read_system_file, execute_cmd_and_get_output};
 
 #[derive(Serialize, Deserialize)]
 pub struct SystemInfo {
@@ -103,6 +103,22 @@ fn get_deep_sleep() -> String {
     format!("{} ({}%)", time_str, pct)
 }
 
+fn get_uptime(uptime_s: f64) -> String {
+    let total_seconds = uptime_s as u64;
+    let days = total_seconds / 86400;
+    let hours = (total_seconds % 86400) / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let seconds = total_seconds % 60;
+    
+    let mut time_str = String::new();
+    if days > 0 { time_str.push_str(&format!("{}d ", days)); }
+    if hours > 0 || days > 0 { time_str.push_str(&format!("{}h ", hours)); }
+    if minutes > 0 || hours > 0 || days > 0 { time_str.push_str(&format!("{}m ", minutes)); }
+    time_str.push_str(&format!("{}s", seconds));
+    
+    time_str
+}
+
 pub fn fetch_system_info() -> SystemInfo {
     let load_avg_raw = read_system_file("/proc/loadavg");
     let load_avg = if !load_avg_raw.is_empty() {
@@ -184,7 +200,7 @@ pub fn fetch_system_info() -> SystemInfo {
         soc: get_soc_info(),
         ram: get_ram_info(),
         kernel: if kernel.is_empty() { "-".to_string() } else { kernel },
-        uptime: format!("{:.0}s", uptime_s),
+        uptime: get_uptime(uptime_s),
         battery: format!("{}%", read_system_file("/sys/class/power_supply/battery/capacity").trim()),
         resolution: execute_cmd_and_get_output("wm size").replace("Physical size: ", "").trim().to_string(),
         root_manager: "Unknown".to_string(),
@@ -309,7 +325,7 @@ pub fn poll_hardware() -> RealTimeMetrics {
     // Battery
     let mut t_level = 0;
     let mut t_temp = 0.0f32;
-    let bat_dump = crate::shell::execute_cmd_and_get_output("dumpsys battery");
+    let bat_dump = crate::utils::shell::execute_cmd_and_get_output("dumpsys battery");
     for line in bat_dump.lines() {
         let info = line.trim();
         if info.starts_with("level: ") {

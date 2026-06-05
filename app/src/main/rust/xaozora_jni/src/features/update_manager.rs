@@ -3,7 +3,7 @@ use jni::JNIEnv;
 use jni::objects::{JClass, JString};
 use jni::sys::{jstring, jboolean};
 
-use crate::shell::execute_cmd;
+use crate::utils::shell::execute_cmd;
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct AppUpdateResult {
