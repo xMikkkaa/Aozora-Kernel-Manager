@@ -101,8 +101,6 @@ fun AboutScreen(
     val scope = rememberCoroutineScope()
 
     var appVersion by remember { mutableStateOf("Loading...") }
-    var isAutdAvailable by remember { mutableStateOf(false) }
-    var autdVersionStr by remember { mutableStateOf("") }
     var autoCheckUpdates by remember { mutableStateOf(true) }
     var showUpdateDialog by remember { mutableStateOf(false) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
@@ -128,13 +126,6 @@ fun AboutScreen(
                 appVersion = packageInfo.versionName ?: "Unknown"
             } catch (_: Exception) {
                 appVersion = "Unknown"
-            }
-
-            val autdExists = RootShellHelper.checkFileExists("/system/bin/autd")
-            isAutdAvailable = autdExists
-            if (autdExists) {
-                val v = RootShellHelper.readSystemFile("${context.filesDir.path}/autd_version").trim()
-                autdVersionStr = v.ifBlank { "Unknown" }
             }
 
             autoCheckUpdates = prefs.getBoolean("auto_check_updates", true)
@@ -276,20 +267,6 @@ fun AboutScreen(
             Text("Aozora Kernel Manager", style = MaterialTheme.typography.bodyMedium.copy(color = colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold))
             Spacer(modifier = Modifier.height(4.dp))
             Text("v$appVersion", style = MaterialTheme.typography.labelSmall.copy(color = colorScheme.onSurfaceVariant.copy(alpha = 0.7f)))
-            
-            if (isAutdAvailable) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Box(
-                    modifier = Modifier
-                        .background(colorScheme.primary.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        "AUTD Version : $autdVersionStr",
-                        style = MaterialTheme.typography.labelSmall.copy(color = colorScheme.primary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                    )
-                }
-            }
         }
         Spacer(modifier = Modifier.height(140.dp))
         Spacer(modifier = Modifier.navigationBarsPadding())
