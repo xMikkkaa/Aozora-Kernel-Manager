@@ -19,6 +19,7 @@ mod monitor;
 mod process;
 mod utils;
 mod autd;
+mod ipc;
 
 use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -86,6 +87,10 @@ fn main() {
             utils::logger::run_logger(path_clone);
         }));
     }
+
+    handles.push(thread::spawn(|| {
+        ipc::start_ipc_server();
+    }));
 
     if enable_autd {
         handles.push(thread::spawn(|| {

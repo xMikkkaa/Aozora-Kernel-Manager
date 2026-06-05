@@ -15,6 +15,24 @@ object NativeDaemonManager {
     private const val TAG = "NativeDaemonManager"
     private val daemonMutex = Mutex()
 
+    private fun suCmd(cmd: String): Boolean {
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+            process.waitFor() == 0
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun suCmdOut(cmd: String): String {
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+            process.inputStream.bufferedReader().use { it.readText() }
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
     suspend fun extractAndStartDaemon(context: Context, enableAutd: Boolean? = null) = withContext(Dispatchers.IO) {
         daemonMutex.withLock {
             val daemonFile = File(context.filesDir, DAEMON_FILENAME)
@@ -37,10 +55,10 @@ object NativeDaemonManager {
                     }
                 }
                 
-                RootShellHelper.executeCmd("pkill -15 $DAEMON_FILENAME; killall -15 $DAEMON_FILENAME")
+                suCmd("killall -9 $DAEMON_FILENAME; pkill -9 $DAEMON_FILENAME")
                 kotlinx.coroutines.delay(500)
                 
-                RootShellHelper.executeCmd("mv ${tmpFile.absolutePath} ${daemonFile.absolutePath}")
+                suCmd("rm -f ${daemonFile.absolutePath}; mv ${tmpFile.absolutePath} ${daemonFile.absolutePath}")
             } catch (e: Exception) {
                 Log.e(TAG, "Extraction failed", e)
                 return@withLock false
@@ -56,10 +74,10 @@ object NativeDaemonManager {
             val autdInfoFile = File(context.filesDir, "autd/autd_awake_method.info")
             if (!autdInfoFile.exists()) autdInfoFile.createNewFile()
             
-            RootShellHelper.executeCmd("chmod 666 ${autdInfoFile.absolutePath}")
-            RootShellHelper.executeCmd("chmod -R 777 ${context.filesDir.absolutePath}/autd")
+            suCmd("chmod 666 ${autdInfoFile.absolutePath}")
+            suCmd("chmod -R 777 ${context.filesDir.absolutePath}/autd")
             
-            RootShellHelper.executeCmd("chmod +x $executablePath")
+            suCmd("chmod +x $executablePath")
             
             val shouldEnableBattmon = prefs.getBoolean("battery_monitor_service", true)
             var args = if (shouldEnableBattmon) "--battery-logger $batteryLogPath " else ""
@@ -71,7 +89,7 @@ object NativeDaemonManager {
             }
             
             val startCmd = "cd ${context.filesDir.absolutePath} && nohup $executablePath $args > /dev/null 2>&1 &"
-            if (RootShellHelper.executeCmd(startCmd)) {
+            if (suCmd(startCmd)) {
                 kotlinx.coroutines.delay(200)
             }
             
@@ -81,7 +99,7 @@ object NativeDaemonManager {
 
     fun isDaemonRunning(): Boolean {
         val cmd = "pgrep -x $DAEMON_FILENAME"
-        val output = RootShellHelper.executeCmdAndGetOutput(cmd)
+        val output = suCmdOut(cmd)
         return output.isNotBlank()
     }
 }

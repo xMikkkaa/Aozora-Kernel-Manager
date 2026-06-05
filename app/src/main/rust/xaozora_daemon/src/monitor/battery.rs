@@ -24,17 +24,16 @@ static IS_IDLE_CHARGING_ACTIVE: AtomicBool = AtomicBool::new(false);
 static ORIGINAL_CURRENTS: Mutex<Option<Vec<(String, String)>>> = Mutex::new(None);
 
 
-struct ChargeSwitch {
-    path: &'static str,
-    enable: &'static str,
-    disable: &'static str,
-    use_max: bool,
+pub struct ChargeSwitch {
+    pub path: &'static str,
+    pub enable: &'static str,
+    pub disable: &'static str,
+    pub use_max: bool,
 }
 
-const SWITCHES: &[ChargeSwitch] = &[
-    ChargeSwitch { path: "/sys/class/power_supply/battery/battery_charging_enabled", enable: "1", disable: "0", use_max: false },
-    ChargeSwitch { path: "/sys/class/power_supply/battery/constant_charge_current_max", enable: "3000000", disable: "100000", use_max: true },
-];
+static SWITCH_CHIMERA: ChargeSwitch = ChargeSwitch { path: "/sys/kernel/bypass_charge/bypass_charging", enable: "0", disable: "1", use_max: false };
+static SWITCH_AOZORA: ChargeSwitch = ChargeSwitch { path: "/sys/class/power_supply/battery/input_suspend", enable: "0", disable: "1", use_max: false };
+static SWITCH_FALLBACK: ChargeSwitch = ChargeSwitch { path: "/sys/class/power_supply/battery/constant_charge_current_max", enable: "3000000", disable: "100000", use_max: true };
 
 
 
@@ -99,21 +98,39 @@ fn get_safe_fallback(path: &PathBuf, default_enable: &str) -> String {
     default_enable.to_string()
 }
 
-fn get_active_switches() -> Vec<&'static ChargeSwitch> {
+pub fn get_active_switches() -> Vec<&'static ChargeSwitch> {
     let mut active = Vec::new();
-    let mut found_limit = false;
+    let proc_version = std::process::Command::new("cat")
+        .arg("/proc/version")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).to_lowercase())
+        .unwrap_or_default();
     
-    for sw in SWITCHES.iter() {
-        if PathBuf::from(sw.path).exists() {
-            if sw.use_max {
-                found_limit = true;
-                active.push(sw);
-            } else if !found_limit {
-                active.push(sw);
-                break;
-            }
+    let is_aozora = proc_version.contains("aozora-v9") || proc_version.contains("aozora-v10");
+    let is_chimera = proc_version.contains("chimera");
+    
+    let path_chimera = PathBuf::from(SWITCH_CHIMERA.path);
+    let path_aozora = PathBuf::from(SWITCH_AOZORA.path);
+    let path_fallback = PathBuf::from(SWITCH_FALLBACK.path);
+    
+    if is_aozora {
+        if path_aozora.exists() {
+            active.push(&SWITCH_AOZORA);
+        } else if path_fallback.exists() {
+            active.push(&SWITCH_FALLBACK);
+        }
+    } else if is_chimera {
+        if path_chimera.exists() {
+            active.push(&SWITCH_CHIMERA);
+        } else if path_fallback.exists() {
+            active.push(&SWITCH_FALLBACK);
+        }
+    } else {
+        if path_fallback.exists() {
+            active.push(&SWITCH_FALLBACK);
         }
     }
+    
     active
 }
 
@@ -131,7 +148,11 @@ fn write_sysfs(path: &PathBuf, val: &str) {
         perms.set_mode(0o644);
         let _ = fs::set_permissions(path, perms);
     }
-    let _ = fs::write(path, format!("{}\n", val));
+    
+    let _ = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("echo '{}' > {}", val, path.display()))
+        .status();
 }
 
 pub fn init_backup_once() {
@@ -142,8 +163,8 @@ pub fn init_backup_once() {
     }
 
     let mut out = String::new();
-    for sw in SWITCHES.iter() {
-        if !sw.use_max { continue; }
+    let sw = &SWITCH_FALLBACK;
+    if sw.use_max {
         let path = PathBuf::from(sw.path);
         let fallback = get_safe_fallback(&path, sw.enable);
         out.push_str(&format!("{}|{}\n", sw.path, fallback));
@@ -197,15 +218,6 @@ pub fn enable_idle_charging() {
 
 pub fn disable_idle_charging() {
     if !IS_IDLE_CHARGING_ACTIVE.load(Ordering::Relaxed) {
-        let active_switches = get_active_switches();
-        for sw in active_switches {
-            let path = PathBuf::from(sw.path);
-            if sw.use_max {
-                write_sysfs(&path, &get_safe_fallback(&path, sw.enable));
-            } else {
-                write_sysfs(&path, sw.enable);
-            }
-        }
         return;
     }
     
