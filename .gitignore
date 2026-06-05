@@ -19,3 +19,5 @@ INSTRUCTIONS.md
 autd_reference/
 flutter_reference/
 app/src/main/rust/xaozora_daemon/target
+app/src/main/rust/xaozora_jni/target
+*.patch
