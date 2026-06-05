@@ -87,9 +87,12 @@ fun TweaksScreen(
     var ramUsed by remember { mutableIntStateOf(0) }
     var ramFree by remember { mutableIntStateOf(0) }
 
-    var bypassCharging by remember { mutableStateOf(false) }
     var optimizeGameThread by remember { mutableStateOf(false) }
     var idleCharging by remember { mutableStateOf(false) }
+
+    var isSupportedKernel by remember { mutableStateOf(false) }
+    var bypassNode by remember { mutableStateOf("") }
+    var manualBypassCharging by remember { mutableStateOf(false) }
 
     var showFlushDialog by remember { mutableStateOf(false) }
 
@@ -119,14 +122,31 @@ fun TweaksScreen(
         }
     }
 
-    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
 
     LaunchedEffect(lifecycleState) {
         withContext(Dispatchers.IO) {
-            bypassCharging = RootShellHelper.readSystemFile("/sys/class/power_supply/battery/input_suspend").trim() == "1"
             optimizeGameThread = try { java.io.File(context.filesDir, "autd/autd_opt_allow").readText().trim() == "1" } catch (e: Exception) { false }
             idleCharging = try { java.io.File(context.filesDir, "autd/autd_idle_charging").readText().trim() == "1" } catch (e: Exception) { false }
+            
+            val procVersion = RootShellHelper.executeCmdAndGetOutput("cat /proc/version").lowercase()
+            val isAozora = procVersion.contains("aozora-v9") || procVersion.contains("aozora-v10")
+            val isChimera = procVersion.contains("chimera")
+            
+            if (isAozora) {
+                isSupportedKernel = true
+                bypassNode = "/sys/class/power_supply/battery/input_suspend"
+            } else if (isChimera) {
+                isSupportedKernel = true
+                bypassNode = "/sys/kernel/bypass_charge/bypass_charging"
+            } else {
+                isSupportedKernel = false
+            }
+
+            if (isSupportedKernel) {
+                manualBypassCharging = RootShellHelper.readSystemFile(bypassNode).trim() == "1"
+            }
         }
         if (lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
             while (true) {
@@ -323,29 +343,7 @@ fun TweaksScreen(
                 Text("Quick Toggles", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
                 Spacer(modifier = Modifier.height(12.dp))
 
-                CustomToggleCard(
-                    title = "Bypass Charging",
-                    subtitle = "Stop charging while plugged in to reduce heat.",
-                    icon = Icons.Rounded.BatteryChargingFull,
-                    checked = bypassCharging,
-                    hazeState = hazeState,
-                    onCheckedChange = { newVal ->
-                        scope.launch(Dispatchers.IO) {
-                            if (RootShellHelper.writeSystemFile("/sys/class/power_supply/battery/input_suspend", if (newVal) "1" else "0")) {
-                                bypassCharging = newVal
-                                scope.launch {
-                                    snackbarHostState.showSnackbar(if (newVal) "Bypass Charging Enabled" else "Bypass Charging Disabled")
-                                }
-                            } else {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("Failed to toggle Bypass Charging")
-                                }
-                            }
-                        }
-                    }
-                )
 
-                Spacer(modifier = Modifier.height(12.dp))
                 CustomToggleCard(
                     title = "Optimize Game Thread",
                     subtitle = "Prioritize game processes for better performance.",
@@ -370,8 +368,8 @@ fun TweaksScreen(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 CustomToggleCard(
-                    title = "Idle Charging",
-                    subtitle = "Reduce charging while gaming. (Experimental)",
+                    title = "Bypass Charging While Gaming",
+                    subtitle = "Stop charging to reduce heat while gaming.",
                     icon = Icons.Rounded.BatteryChargingFull,
                     checked = idleCharging,
                     hazeState = hazeState,
@@ -381,11 +379,43 @@ fun TweaksScreen(
                                 idleCharging = newVal
                                 scope.launch {
                                     val status = if (newVal) "Enabled" else "Disabled"
-                                    snackbarHostState.showSnackbar("Idle Charging $status")
+                                    snackbarHostState.showSnackbar("Bypass Charging While Gaming $status")
                                 }
                             } else {
                                 scope.launch {
-                                    snackbarHostState.showSnackbar("Failed to toggle Idle Charging")
+                                    snackbarHostState.showSnackbar("Failed to toggle Bypass Charging While Gaming")
+                                }
+                            }
+                        }
+                    }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+            
+            if (isSupportedKernel) {
+                if (!isAutdAvailable) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text("Quick Toggles", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                
+                CustomToggleCard(
+                    title = "Manual Bypass Charging",
+                    subtitle = "Stop charging to reduce heat while plugged in.",
+                    icon = Icons.Rounded.BatteryChargingFull,
+                    checked = manualBypassCharging,
+                    hazeState = hazeState,
+                    onCheckedChange = { newVal ->
+                        scope.launch(Dispatchers.IO) {
+                            if (RootShellHelper.writeSystemFile(bypassNode, if (newVal) "1" else "0")) {
+                                manualBypassCharging = newVal
+                                scope.launch {
+                                    val status = if (newVal) "Enabled" else "Disabled"
+                                    snackbarHostState.showSnackbar("Manual Bypass Charging $status")
+                                }
+                            } else {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Failed to toggle Bypass Charging")
                                 }
                             }
                         }
