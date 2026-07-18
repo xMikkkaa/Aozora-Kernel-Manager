@@ -60,7 +60,11 @@ fun GlassCard(
                 )
                 .background(
                     if (hazeState != null) {
-                        Color.Transparent
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            Color.Transparent
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainer
+                        }
                     } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                         MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.25f)
                     } else {

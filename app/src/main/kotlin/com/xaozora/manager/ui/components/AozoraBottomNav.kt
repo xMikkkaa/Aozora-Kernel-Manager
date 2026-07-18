@@ -101,6 +101,7 @@ fun AozoraBottomNav(
                     .size(56.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .hazeEffect(state = hazeState, style = strongBlurStyle)
+                    .background(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer)
                     .border(
                         width = 1.2.dp,
                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
@@ -131,6 +132,7 @@ fun AozoraBottomNav(
                     .size(56.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .hazeEffect(state = hazeState, style = strongBlurStyle)
+                    .background(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer)
                     .border(
                         width = 1.2.dp,
                         color = if (isDevMode) MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
@@ -165,6 +167,7 @@ fun AozoraBottomNav(
                         .matchParentSize()
                         .clip(CircleShape)
                         .hazeEffect(state = hazeState, style = strongBlurStyle)
+                        .background(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer)
                         .border(
                             width = 1.2.dp,
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),

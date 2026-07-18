@@ -63,7 +63,7 @@ fun BatteryDialog(
                         MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                         RoundedCornerShape(32.dp)
                     )
-                    .background(Color.Transparent)
+                    .background(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) Color.Transparent else androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainer)
                     .clickable(enabled = false) {},
             ) {
                 Column(

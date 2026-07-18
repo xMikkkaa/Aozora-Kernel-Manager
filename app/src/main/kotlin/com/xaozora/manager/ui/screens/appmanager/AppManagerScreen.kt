@@ -262,7 +262,7 @@ fun AppManagerScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .hazeEffect(state = hazeState, style = sheetStyle)
-                    .background(Color.Transparent)
+                    .background(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) Color.Transparent else androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainer)
             ) {
                 Column(
                     modifier = Modifier
@@ -273,7 +273,7 @@ fun AppManagerScreen(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                             shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)
                         )
-                        .background(Color.Transparent)
+                        .background(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) Color.Transparent else androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainer)
                 ) {
                     Box(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
                         BottomSheetDefaults.DragHandle()
@@ -312,7 +312,7 @@ fun AppManagerScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .hazeEffect(state = hazeState, style = sheetStyle)
-                    .background(Color.Transparent)
+                    .background(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) Color.Transparent else androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainer)
             ) {
                 Column(
                     modifier = Modifier
@@ -323,7 +323,7 @@ fun AppManagerScreen(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                             shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)
                         )
-                        .background(Color.Transparent)
+                        .background(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) Color.Transparent else androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainer)
                 ) {
                     Box(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
                         BottomSheetDefaults.DragHandle()
