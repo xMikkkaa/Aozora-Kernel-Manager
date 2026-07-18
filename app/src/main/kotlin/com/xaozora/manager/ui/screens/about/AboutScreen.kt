@@ -201,6 +201,19 @@ fun AboutScreen(
             hazeState = hazeState,
             angle = angle
         )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        ProfileCard(
+            name = "DuttaWry",
+            role = "Tester",
+            description = "Passionate tester contributing to system reliability.",
+            imageUrl = "https://avatars.githubusercontent.com/DuttaWry",
+            actionIcon = Icons.Outlined.Code,
+            actionLabel = "View GitHub Profile",
+            onActionClick = { launchUrl("https://github.com/DuttaWry") },
+            hazeState = hazeState,
+            angle = angle
+        )
         Spacer(modifier = Modifier.height(24.dp))
 
         Text("Updates", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
