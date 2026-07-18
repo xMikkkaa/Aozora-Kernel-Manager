@@ -383,3 +383,21 @@ pub extern "system" fn Java_com_xaozora_manager_core_utils_SystemInfoUtils_pollH
     let output = env.new_string(json_str).unwrap();
     output.into_raw()
 }
+
+#[no_mangle]
+pub extern "system" fn Java_com_xaozora_manager_core_utils_SystemInfoUtils_updateSystemState<'local>(
+    _env: JNIEnv<'local>,
+    _class: JClass,
+    bat_level: jni::sys::jint,
+    is_screen_on: jni::sys::jboolean,
+) {
+    let scr = if is_screen_on != 0 { "1" } else { "0" };
+    let msg = format!("BAT:{}|SCR:{}\n", bat_level, scr);
+    
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    
+    if let Ok(mut file) = OpenOptions::new().write(true).open("/data/data/com.xaozora.manager/files/autd/events.pipe") {
+        let _ = file.write_all(msg.as_bytes());
+    }
+}

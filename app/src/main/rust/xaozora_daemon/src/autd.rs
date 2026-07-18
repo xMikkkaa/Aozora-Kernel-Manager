@@ -46,6 +46,7 @@ pub fn interruptible_sleep(secs: u64) {
 
 pub fn run_autd() {
     config::ensure_app_dir();
+    process::thread_opt::init_cpuset();
 
     let mut last_mode = String::with_capacity(64);
     let mut user_base = String::with_capacity(64);
@@ -62,14 +63,48 @@ pub fn run_autd() {
     utils::cmd::send_toast("xAozora Daemon (AUTD) Started");
     monitor::display::log_active_method("AUTD Active: Monitoring system state...");
 
+    let fifo_path = config::AUTD_EVENT_PIPE;
+    let _ = fs::remove_file(fifo_path);
+    let c_path = std::ffi::CString::new(fifo_path).unwrap();
+    unsafe {
+        libc::mkfifo(c_path.as_ptr(), 0o666);
+    }
+    let _ = std::process::Command::new("chmod").arg("666").arg(fifo_path).status();
+
+    let mut fifo_file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(fifo_path)
+        .expect("Failed to open AUTD event pipe");
+
+    use std::os::unix::io::AsRawFd;
+    let fifo_fd = fifo_file.as_raw_fd();
+
+    let mut bat_level = monitor::battery::get_battery_level();
+    let mut is_awake_state = monitor::display::is_awake();
+
     while RUNNING.load(Ordering::SeqCst) {
-        if !monitor::display::is_awake() {
+        if !is_awake_state {
             monitor::display::log_active_method("Screen OFF. Entering Deep Sleep Protocol.");
             utils::cmd::apply_mode("powersave");
             utils::cmd::send_toast("Deep Sleep Protocol: Active");
 
-            while !monitor::display::is_awake() && RUNNING.load(Ordering::SeqCst) {
-                interruptible_sleep(3);
+            while !is_awake_state && RUNNING.load(Ordering::SeqCst) {
+                let mut pfd = libc::pollfd { fd: fifo_fd, events: libc::POLLIN, revents: 0 };
+                let ret = unsafe { libc::poll(&mut pfd, 1, -1) };
+                if ret > 0 && (pfd.revents & libc::POLLIN) != 0 {
+                    let mut buf = [0u8; 128];
+                    if let Ok(n) = std::io::Read::read(&mut fifo_file, &mut buf) {
+                        let msg = String::from_utf8_lossy(&buf[..n]);
+                        for part in msg.split(|c| c == '|' || c == '\n') {
+                            if part.starts_with("BAT:") {
+                                bat_level = part[4..].trim().parse().unwrap_or(bat_level);
+                            } else if part.starts_with("SCR:") {
+                                is_awake_state = part[4..].trim() == "1";
+                            }
+                        }
+                    }
+                }
             }
             
             if RUNNING.load(Ordering::SeqCst) {
@@ -104,7 +139,6 @@ pub fn run_autd() {
             false
         };
 
-        let bat_level = monitor::battery::get_battery_level();
         let ps_active = monitor::battery::is_android_powersave();
 
         process::game_det::load_filelist_if_changed();
@@ -134,8 +168,6 @@ pub fn run_autd() {
             if game_pid > 0 {
                 if is_optimize_allowed {
                     process::thread_opt::optimize_game_threads(game_pid);
-                } else {
-                    process::thread_opt::clear_optimized_set();
                 }
             }
         } else if bat_level <= 20 || ps_active {
@@ -147,7 +179,6 @@ pub fn run_autd() {
                 last_mode.push_str("powersave");
                 idle_cycles = 0;
             }
-            process::thread_opt::clear_optimized_set();
         } else {
             if last_mode != user_base {
                 utils::cmd::apply_mode(&user_base);
@@ -160,7 +191,6 @@ pub fn run_autd() {
                 last_mode.push_str(&user_base);
                 idle_cycles = 0;
             }
-            process::thread_opt::clear_optimized_set();
         }
 
         if bat_level <= 20 && !low_bat_notif_sent {
@@ -174,10 +204,25 @@ pub fn run_autd() {
 
         if !game_found && bat_level > 20 && !ps_active {
             idle_cycles += 1;
-            interruptible_sleep(if idle_cycles > 10 { 10 } else { 3 });
         } else {
             idle_cycles = 0;
-            interruptible_sleep(3);
+        }
+
+        let timeout_ms = if idle_cycles > 10 { 10000 } else { 3000 };
+        let mut pfd = libc::pollfd { fd: fifo_fd, events: libc::POLLIN, revents: 0 };
+        let ret = unsafe { libc::poll(&mut pfd, 1, timeout_ms) };
+        if ret > 0 && (pfd.revents & libc::POLLIN) != 0 {
+            let mut buf = [0u8; 128];
+            if let Ok(n) = std::io::Read::read(&mut fifo_file, &mut buf) {
+                let msg = String::from_utf8_lossy(&buf[..n]);
+                for part in msg.split(|c| c == '|' || c == '\n') {
+                    if part.starts_with("BAT:") {
+                        bat_level = part[4..].trim().parse().unwrap_or(bat_level);
+                    } else if part.starts_with("SCR:") {
+                        is_awake_state = part[4..].trim() == "1";
+                    }
+                }
+            }
         }
     }
 

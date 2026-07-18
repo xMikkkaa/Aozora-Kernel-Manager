@@ -40,7 +40,7 @@ class MonitorService : Service() {
 
     companion object {
         var isServiceRunning = false
-        private const val CHANNEL_ID = "xAozoraServiceV2"
+        private const val CHANNEL_ID = "xAozoraServiceV3"
         private const val TAG = "MonitorService"
         private var wasCharging = false
     }
@@ -52,6 +52,18 @@ class MonitorService : Service() {
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val action = intent.action
+            
+            // JNI Update System State
+            try {
+                val bm = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+                val batLevel = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+                val isScreenOn = pm.isInteractive
+                com.xaozora.manager.core.utils.SystemInfoUtils.updateSystemState(batLevel, isScreenOn)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to update JNI System State", e)
+            }
+
             if (Intent.ACTION_SCREEN_ON == action || Intent.ACTION_USER_PRESENT == action) {
                 serviceScope.launch {
                     if (!com.xaozora.manager.core.utils.NativeDaemonManager.isDaemonRunning()) {
@@ -75,6 +87,8 @@ class MonitorService : Service() {
                 val filter = IntentFilter().apply {
                     addAction(Intent.ACTION_SCREEN_ON)
                     addAction(Intent.ACTION_USER_PRESENT)
+                    addAction(Intent.ACTION_SCREEN_OFF)
+                    addAction(Intent.ACTION_BATTERY_CHANGED)
                 }
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -184,7 +198,7 @@ class MonitorService : Service() {
     private fun createNotification(): Notification {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channel = NotificationChannel(
-            CHANNEL_ID, "Aozora Monitor Service", NotificationManager.IMPORTANCE_LOW
+            CHANNEL_ID, "Aozora Monitor Service", NotificationManager.IMPORTANCE_MIN
         ).apply {
             setShowBadge(false)
         }

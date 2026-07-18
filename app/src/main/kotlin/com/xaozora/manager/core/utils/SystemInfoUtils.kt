@@ -54,6 +54,9 @@ object SystemInfoUtils {
 
     private external fun fetchSystemInfoJson(): String
     private external fun pollHardwareJson(): String
+    
+    @JvmStatic
+    external fun updateSystemState(batLevel: Int, isScreenOn: Boolean)
 
     suspend fun fetchSystemInfo(): SystemInfo = withContext(Dispatchers.IO) {
         val jsonStr = fetchSystemInfoJson()

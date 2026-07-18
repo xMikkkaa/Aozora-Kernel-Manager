@@ -28,6 +28,8 @@ pub const AUTD_PS_STATE_PATH: &str = "autd/autd_ps_state";
 pub const AUTD_IDLE_CHARGING_PATH: &str = "autd/autd_idle_charging";
 pub const AUTD_SYSFS_BACKUP_PATH: &str = "autd/autd_sysfs_backup";
 pub const AUTD_AWAKE_DEBUG_LOG: &str = "autd/autd_awake_method.info";
+pub const GAME_MODE_DIR: &str = "/dev/cpuset/game-mode";
+pub const AUTD_EVENT_PIPE: &str = "autd/events.pipe";
 
 pub fn setup_android_env() {
     unsafe {

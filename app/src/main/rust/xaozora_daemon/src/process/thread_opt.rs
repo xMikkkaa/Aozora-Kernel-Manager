@@ -14,71 +14,36 @@
  * limitations under the License.
  */
 
-use std::collections::HashSet;
 use std::fs;
-use std::io::{Cursor, Write};
-use std::sync::Mutex;
+use std::path::Path;
 
-static OPTIMIZED_SET: Mutex<Option<HashSet<i32>>> = Mutex::new(None);
-
-pub fn clear_optimized_set() {
-    if let Ok(mut set_opt) = OPTIMIZED_SET.lock() {
-        if let Some(set) = set_opt.as_mut() {
-            set.clear();
-        }
+fn set_value(file: &str, value: &str) {
+    if Path::new(file).exists() {
+        let _ = fs::write(file, value);
     }
 }
 
-pub fn optimize_game_threads(pid: i32) {
-    let mut path_buf = [0u8; 64];
-    let mut cursor = Cursor::new(&mut path_buf[..]);
-    let _ = write!(cursor, "/proc/{}/task/", pid);
-    let len = cursor.position() as usize;
-
-    if let Ok(path_str) = std::str::from_utf8(&path_buf[..len]) {
-        if let Ok(entries) = fs::read_dir(path_str) {
-            for entry in entries.flatten() {
-                if let Some(name) = entry.file_name().to_str() {
-                    match name.as_bytes().first() {
-                        Some(b) if b.is_ascii_digit() => {}
-                        _ => continue,
-                    }
-
-                    if let Ok(tid) = name.parse::<i32>() {
-                        let already_optimized = if let Ok(mut set_opt) = OPTIMIZED_SET.lock() {
-                            if set_opt.is_none() {
-                                *set_opt = Some(HashSet::with_capacity(128));
-                            }
-                            if let Some(set) = set_opt.as_ref() {
-                                set.contains(&tid)
-                            } else {
-                                false
-                            }
-                        } else {
-                            false
-                        };
-
-                        if already_optimized {
-                            continue;
-                        }
-
-                        let mut mask: libc::cpu_set_t = unsafe { std::mem::zeroed() };
-                        for i in 0usize..32usize {
-                            unsafe { libc::CPU_SET(i, &mut mask) };
-                        }
-
-                        let res = unsafe { libc::sched_setaffinity(tid, std::mem::size_of::<libc::cpu_set_t>(), &mask) };
-
-                        if res == 0 {
-                            if let Ok(mut set_opt) = OPTIMIZED_SET.lock() {
-                                if let Some(set) = set_opt.as_mut() {
-                                    set.insert(tid);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+pub fn init_cpuset() {
+    if !Path::new(crate::config::GAME_MODE_DIR).exists() {
+        if fs::create_dir_all(crate::config::GAME_MODE_DIR).is_err() {
+            return;
         }
     }
+    
+    let mems_path = format!("{}/mems", crate::config::GAME_MODE_DIR);
+    set_value(&mems_path, "0");
+    
+    let cpus_path = format!("{}/cpus", crate::config::GAME_MODE_DIR);
+    set_value(&cpus_path, "4-7");
+    
+    let uclamp_boosted_path = format!("{}/uclamp.boosted", crate::config::GAME_MODE_DIR);
+    set_value(&uclamp_boosted_path, "1");
+    
+    let uclamp_min_path = format!("{}/uclamp.min", crate::config::GAME_MODE_DIR);
+    set_value(&uclamp_min_path, "100");
+}
+
+pub fn optimize_game_threads(pid: i32) {
+    let tasks_path = format!("{}/tasks", crate::config::GAME_MODE_DIR);
+    let _ = fs::write(tasks_path, pid.to_string());
 }
