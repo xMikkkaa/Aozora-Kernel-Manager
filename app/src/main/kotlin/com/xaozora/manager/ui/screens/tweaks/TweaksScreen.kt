@@ -34,6 +34,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -91,6 +93,7 @@ fun TweaksScreen(
     var idleCharging by remember { mutableStateOf(false) }
 
     var isSupportedKernel by remember { mutableStateOf(false) }
+    var isHydraSupported by remember { mutableStateOf(false) }
     var bypassNode by remember { mutableStateOf("") }
     var manualBypassCharging by remember { mutableStateOf(false) }
 
@@ -129,6 +132,8 @@ fun TweaksScreen(
         withContext(Dispatchers.IO) {
             optimizeGameThread = try { java.io.File(context.filesDir, "autd/autd_opt_allow").readText().trim() == "1" } catch (e: Exception) { false }
             idleCharging = try { java.io.File(context.filesDir, "autd/autd_idle_charging").readText().trim() == "1" } catch (e: Exception) { false }
+            
+            isHydraSupported = RootShellHelper.checkFileExists("/proc/sys/kernel/hydra_pid")
             
             val procVersion = RootShellHelper.executeCmdAndGetOutput("cat /proc/version").lowercase()
             val isAozora = procVersion.contains("aozora-v9") || procVersion.contains("aozora-v10")
@@ -364,6 +369,44 @@ fun TweaksScreen(
                                 }
                             }
                         }
+                    },
+                    expandableContent = {
+                        if (isHydraSupported) {
+                            var hydraEnabled by remember { mutableStateOf(try { java.io.File(context.filesDir, "autd/autd_hydra_enable").readText().trim() != "0" } catch(e: Exception) { true }) }
+                            Column(modifier = Modifier.padding(top = 16.dp)) {
+                                HorizontalDivider(color = colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Kernel Level Optimize (HYDRA)",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, color = colorScheme.onSurface)
+                                        )
+                                        Text(
+                                            text = "Offloads thread tuning to the kernel for zero-latency affinity control.",
+                                            style = MaterialTheme.typography.bodySmall.copy(color = colorScheme.onSurfaceVariant)
+                                        )
+                                    }
+                                    Switch(
+                                        checked = hydraEnabled,
+                                        onCheckedChange = { newVal ->
+                                            scope.launch(Dispatchers.IO) {
+                                                if (RootShellHelper.writeSystemFile("${context.filesDir.path}/autd/autd_hydra_enable", if (newVal) "1" else "0")) {
+                                                    hydraEnabled = newVal
+                                                }
+                                            }
+                                        }
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                HorizontalDivider(color = colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                Spacer(modifier = Modifier.height(12.dp))
+                            }
+                        }
                     }
                 )
                 Spacer(modifier = Modifier.height(12.dp))
@@ -437,7 +480,8 @@ private fun CustomToggleCard(
     icon: ImageVector,
     checked: Boolean,
     hazeState: HazeState,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    expandableContent: @Composable () -> Unit = {}
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val bgColor by animateColorAsState(if (checked) colorScheme.primaryContainer.copy(alpha = 0.25f) else colorScheme.surfaceContainer, label = "bg")
@@ -459,16 +503,21 @@ private fun CustomToggleCard(
         shape = RoundedCornerShape(24.dp)
     ) {
         Box(modifier = Modifier.fillMaxWidth().background(if (checked) bgColor else Color.Transparent).padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.background(iconBgColor, CircleShape).padding(12.dp)) { Icon(icon, contentDescription = null, tint = iconColor) }
-                Spacer(modifier = Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = if (checked) colorScheme.onPrimaryContainer else colorScheme.onSurface))
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(subtitle, style = MaterialTheme.typography.bodySmall.copy(color = if (checked) colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else colorScheme.onSurfaceVariant))
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier.background(iconBgColor, CircleShape).padding(12.dp)) { Icon(icon, contentDescription = null, tint = iconColor) }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = if (checked) colorScheme.onPrimaryContainer else colorScheme.onSurface))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(subtitle, style = MaterialTheme.typography.bodySmall.copy(color = if (checked) colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else colorScheme.onSurfaceVariant))
+                    }
+                    Box(modifier = Modifier.size(52.dp, 28.dp).background(switchBg, CircleShape).border(1.dp, if (checked) colorScheme.primary.copy(alpha = 0.4f) else colorScheme.outlineVariant.copy(alpha = 0.5f), CircleShape).padding(4.dp), contentAlignment = Alignment.CenterStart) {
+                        Box(modifier = Modifier.offset(x = switchOffset).size(20.dp).background(thumbColor, CircleShape))
+                    }
                 }
-                Box(modifier = Modifier.size(52.dp, 28.dp).background(switchBg, CircleShape).border(1.dp, if (checked) colorScheme.primary.copy(alpha = 0.4f) else colorScheme.outlineVariant.copy(alpha = 0.5f), CircleShape).padding(4.dp), contentAlignment = Alignment.CenterStart) {
-                    Box(modifier = Modifier.offset(x = switchOffset).size(20.dp).background(thumbColor, CircleShape))
+                androidx.compose.animation.AnimatedVisibility(visible = checked) {
+                    expandableContent()
                 }
             }
         }
