@@ -59,6 +59,9 @@ pub fn run_autd() {
     interruptible_sleep(1);
     monitor::battery::init_backup_once();
     monitor::battery::reset_charging_states();
+    
+    let mut last_hydra_pid: i32 = 0;
+    let mut sched_lib_active = false;
 
     utils::cmd::send_toast("xAozora Daemon (AUTD) Started");
     monitor::display::log_active_method("AUTD Active: Monitoring system state...");
@@ -145,6 +148,14 @@ pub fn run_autd() {
 
         let game_check = process::game_det::find_game_process();
         let game_found = game_check.is_some();
+        let hydra_supported = std::path::Path::new(config::KERNEL_HYDRA_PID_PATH).exists();
+        let sched_lib_supported = std::path::Path::new(config::KERNEL_SCHED_LIB_NAME_PATH).exists();
+        let user_wants_hydra = if let Ok(bytes) = fs::read(config::AUTD_HYDRA_ENABLE_PATH) {
+            bytes.first() != Some(&b'0')
+        } else {
+            true
+        };
+        let hydra_enabled = hydra_supported && user_wants_hydra;
 
         if game_found && is_idle_charging_enabled {
             monitor::battery::enable_idle_charging();
@@ -167,7 +178,34 @@ pub fn run_autd() {
 
             if game_pid > 0 {
                 if is_optimize_allowed {
-                    process::thread_opt::optimize_game_threads(game_pid);
+                    if hydra_enabled {
+                        if last_hydra_pid != game_pid {
+                            let _ = fs::write(config::KERNEL_HYDRA_PID_PATH, game_pid.to_string());
+                            last_hydra_pid = game_pid;
+                        }
+                    } else {
+                        if last_hydra_pid != 0 {
+                            let _ = fs::write(config::KERNEL_HYDRA_PID_PATH, "0");
+                            last_hydra_pid = 0;
+                        }
+                        process::thread_opt::optimize_game_threads(game_pid);
+                    }
+                    
+                    if sched_lib_supported && !sched_lib_active {
+                        let _ = fs::write(config::KERNEL_SCHED_LIB_MASK_PATH, "255");
+                        let _ = fs::write(config::KERNEL_SCHED_LIB_NAME_PATH, config::SCHED_LIB_GAMES);
+                        sched_lib_active = true;
+                    }
+                } else {
+                    if last_hydra_pid != 0 {
+                        let _ = fs::write(config::KERNEL_HYDRA_PID_PATH, "0");
+                        last_hydra_pid = 0;
+                    }
+                    if sched_lib_supported && sched_lib_active {
+                        let _ = fs::write(config::KERNEL_SCHED_LIB_MASK_PATH, "0");
+                        let _ = fs::write(config::KERNEL_SCHED_LIB_NAME_PATH, " ");
+                        sched_lib_active = false;
+                    }
                 }
             }
         } else if bat_level <= 20 || ps_active {
@@ -178,6 +216,15 @@ pub fn run_autd() {
                 last_mode.clear();
                 last_mode.push_str("powersave");
                 idle_cycles = 0;
+            }
+            if hydra_enabled && last_hydra_pid != 0 {
+                let _ = fs::write(config::KERNEL_HYDRA_PID_PATH, "0");
+                last_hydra_pid = 0;
+            }
+            if sched_lib_supported && sched_lib_active {
+                let _ = fs::write(config::KERNEL_SCHED_LIB_MASK_PATH, "0");
+                let _ = fs::write(config::KERNEL_SCHED_LIB_NAME_PATH, " ");
+                sched_lib_active = false;
             }
         } else {
             if last_mode != user_base {
@@ -190,6 +237,15 @@ pub fn run_autd() {
                 last_mode.clear();
                 last_mode.push_str(&user_base);
                 idle_cycles = 0;
+            }
+            if hydra_enabled && last_hydra_pid != 0 {
+                let _ = fs::write(config::KERNEL_HYDRA_PID_PATH, "0");
+                last_hydra_pid = 0;
+            }
+            if sched_lib_supported && sched_lib_active {
+                let _ = fs::write(config::KERNEL_SCHED_LIB_MASK_PATH, "0");
+                let _ = fs::write(config::KERNEL_SCHED_LIB_NAME_PATH, " ");
+                sched_lib_active = false;
             }
         }
 
