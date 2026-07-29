@@ -30,6 +30,12 @@ pub const AUTD_SYSFS_BACKUP_PATH: &str = "autd/autd_sysfs_backup";
 pub const AUTD_AWAKE_DEBUG_LOG: &str = "autd/autd_awake_method.info";
 pub const GAME_MODE_DIR: &str = "/dev/cpuset/game-mode";
 pub const AUTD_EVENT_PIPE: &str = "autd/events.pipe";
+pub const AUTD_HYDRA_ENABLE_PATH: &str = "autd/autd_hydra_enable";
+
+pub const KERNEL_HYDRA_PID_PATH: &str = "/proc/sys/kernel/hydra_pid";
+pub const KERNEL_SCHED_LIB_MASK_PATH: &str = "/proc/sys/kernel/sched_lib_mask_force";
+pub const KERNEL_SCHED_LIB_NAME_PATH: &str = "/proc/sys/kernel/sched_lib_name";
+pub const SCHED_LIB_GAMES: &str = "libunity.so,libil2cpp.so,lib_burst_generated.so,libmain.so,libUnreal.so,libUE4.so,libcocos2dcpp.so,libgodot_android.so,libyoyo.so,libswappywrapper.so";
 
 pub fn setup_android_env() {
     unsafe {
