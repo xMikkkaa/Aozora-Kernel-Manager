@@ -78,7 +78,8 @@ pub fn check_file_exists(path: &str) -> bool {
     if std::path::Path::new(path).exists() {
         return true;
     }
-    execute_cmd(&format!("test -f {}", path))
+    let res = execute_cmd_and_get_output(&format!("if [ -e {} ]; then echo 1; else echo 0; fi", path));
+    res.trim() == "1"
 }
 
 use jni::JNIEnv;
