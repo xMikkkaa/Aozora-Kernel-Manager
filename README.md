@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/xMikkkaa/Aozora-Kernel-Manager/releases/latest"><img src="https://img.shields.io/github/v/release/xMikkkaa/Aozora-Kernel-Manager?style=flat-square&color=00bcd4&label=Release" alt="Latest Release"/></a>
-  <a href="https://github.com/xMikkkaa/Aozora-Kernel-Manager/actions"><img src="https://img.shields.io/github/actions/workflow/status/xMikkkaa/Aozora-Kernel-Manager/auto_release.yml?branch=kotlin&style=flat-square&label=Build" alt="Build Status"/></a>
+  <a href="https://github.com/xMikkkaa/Aozora-Kernel-Manager/actions"><img src="https://img.shields.io/github/actions/workflow/status/xMikkkaa/Aozora-Kernel-Manager/build.yml?branch=kotlin&style=flat-square&label=Build" alt="Build Status"/></a>
   <img src="https://img.shields.io/badge/Min%20SDK-29%20(Android%2010)-brightgreen?style=flat-square" alt="Min SDK"/>
   <img src="https://img.shields.io/badge/Target%20SDK-36%20(Android%2016)-blue?style=flat-square" alt="Target SDK"/>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/xMikkkaa/Aozora-Kernel-Manager?style=flat-square&color=orange" alt="License"/></a>
@@ -132,15 +132,15 @@ graph TD
 
 | Component | Technology |
 |---|---|
-| **Language** | Kotlin 2.3, Rust (edition 2021/2024) |
-| **UI Framework** | Jetpack Compose + Material 3 + Haze 1.7 |
-| **Build System** | Gradle 9.4, AGP 9.2, cargo-ndk |
-| **Compose BOM** | 2026.04.01 |
+| **Language** | Kotlin 2.4.10, Rust (edition 2021/2024) |
+| **UI Framework** | Jetpack Compose + Material 3 + Haze 1.7.3 |
+| **Build System** | Gradle 9.7.1, AGP 9.4.0, cargo-ndk |
+| **Compose BOM** | 2026.08.00 |
 | **Navigation** | HorizontalPager-based swipe navigation |
 | **Background Work** | WorkManager 2.11, Foreground Service (specialUse) |
-| **Serialization** | Gson 2.10 (Kotlin), serde/serde_json (Rust) |
-| **HTTP Client** | ureq 2.9 (Rust-side, for update checks) |
-| **Native Integration** | JNI via Rust (`jni = 0.21`), Unix Domain Socket IPC |
+| **Serialization** | Gson 2.14.0 (Kotlin), serde/serde_json (Rust) |
+| **HTTP Client** | ureq 3.4 (Rust-side, for update checks) |
+| **Native Integration** | JNI via Rust (`jni = 0.22`), Unix Domain Socket IPC |
 | **Target ABI** | `arm64-v8a` only |
 | **Java Compatibility** | JDK 17 |
 
@@ -258,7 +258,8 @@ cd ../../../../..
 │   │                                     # game_det.rs, thread_opt.rs, battery.rs, logger.rs
 │   ├── libs/arm64-v8a/                   # Compiled libnative.so
 │   └── assets/                           # Compiled xaozora_daemon binary
-├── .github/workflows/                    # CI/CD auto-release pipeline
+├── .github/workflows/                    # Build, lint, test, and release workflows
+├── .github/dependabot.yml                # Weekly dependency update configuration
 ├── gradle/libs.versions.toml             # Centralized dependency versions
 └── build.gradle.kts                      # Root build configuration
 ```
@@ -279,13 +280,35 @@ cd ../../../../..
 
 ## CI/CD
 
-The project uses a **GitHub Actions** workflow ([`auto_release.yml`](.github/workflows/auto_release.yml)) for automated releases:
+The project uses GitHub Actions for validation, artifact builds, and releases:
 
-1. **Trigger**: Push to `kotlin` branch (filtered to workflow, build config, or APK changes) or manual dispatch
-2. **Version Extraction**: Parses `versionName` from `app/build.gradle.kts`
-3. **Tag Check**: Skips release if version tag already exists
-4. **Changelog**: Auto-generated from git log since last tag
-5. **Release**: Creates GitHub Release with the signed APK artifact
+### Build CI
+
+[`build.yml`](.github/workflows/build.yml) runs on pull requests targeting `kotlin` and on pushes to `kotlin` that affect build or source files. Documentation-only, license, ignore-file, and icon changes are excluded from push builds. It:
+
+1. Sets up JDK 17, the stable Rust toolchain, and the Android Rust target.
+2. Installs `cargo-ndk` and configures a real or temporary signing key.
+3. Runs `./gradlew assembleRelease` to compile the Android app and native Rust components.
+4. Uploads the generated APK as the `Aozora-Manager-APK` artifact for 90 days.
+
+### Lints and Tests
+
+[`lints.yml`](.github/workflows/lints.yml) runs on pushes and pull requests targeting `kotlin`. The Android job runs `lintDebug` and unit tests, while the Rust job checks formatting, runs Clippy for both native crates, and executes available Rust tests. Reports are uploaded when Android lint fails.
+
+### Releases
+
+[`release.yml`](.github/workflows/release.yml) runs when a `v*` tag is pushed or by manual dispatch. Release builds require the production signing secrets, generate a changelog from Git history, and publish the signed `app-release.apk` to GitHub Releases.
+
+### Dependency Updates
+
+[`dependabot.yml`](.github/dependabot.yml) checks dependencies weekly and groups updates into pull requests for:
+
+- Gradle and Android dependencies in `/`
+- Cargo dependencies in `app/src/main/rust/xaozora_jni`
+- Cargo dependencies in `app/src/main/rust/xaozora_daemon`
+- GitHub Actions used by the workflows
+
+Dependabot does not require a repository cron job. Pull requests are validated by the Build CI and Lints & Tests workflows before merging.
 
 ## Credits
 
