@@ -1,6 +1,6 @@
 use jni::objects::{JClass, JString};
 use jni::sys::{jboolean, jstring};
-use jni::JNIEnv;
+use jni::{errors::ThrowRuntimeExAndDefault, EnvUnowned};
 use serde::{Deserialize, Serialize};
 
 use crate::utils::shell::execute_cmd;
@@ -23,14 +23,14 @@ pub fn check_app_update(current_app_version: &str) -> AppUpdateResult {
         "https://api.github.com/repos/xMikkkaa/Aozora-Kernel-Manager/releases/latest";
 
     let response = match ureq::get(app_repo_url)
-        .set("User-Agent", "Aozora-Kernel-Manager")
+        .header("User-Agent", "Aozora-Kernel-Manager")
         .call()
     {
         Ok(res) => res,
         Err(_) => return AppUpdateResult::default(),
     };
 
-    let json: serde_json::Value = match response.into_json() {
+    let json: serde_json::Value = match response.into_body().read_json() {
         Ok(j) => j,
         Err(_) => return AppUpdateResult::default(),
     };
@@ -89,7 +89,7 @@ fn is_version_greater(new_ver: &str, old_ver: &str) -> bool {
 
 pub fn perform_app_update(apk_url: &str, apk_temp_path: &str) -> bool {
     let response = match ureq::get(apk_url)
-        .set("User-Agent", "Aozora-Kernel-Manager")
+        .header("User-Agent", "Aozora-Kernel-Manager")
         .call()
     {
         Ok(res) => res,
@@ -101,7 +101,12 @@ pub fn perform_app_update(apk_url: &str, apk_temp_path: &str) -> bool {
         Err(_) => return false,
     };
 
-    if std::io::copy(&mut response.into_reader(), &mut out).is_err() {
+    let body = match response.into_body().read_to_vec() {
+        Ok(body) => body,
+        Err(_) => return false,
+    };
+
+    if std::io::Write::write_all(&mut out, &body).is_err() {
         return false;
     }
 
@@ -130,33 +135,36 @@ pub fn perform_app_update(apk_url: &str, apk_temp_path: &str) -> bool {
 pub extern "system" fn Java_com_xaozora_manager_core_network_UpdateManager_checkUpdatesJson<
     'local,
 >(
-    mut env: JNIEnv<'local>,
+    mut env: EnvUnowned<'local>,
     _class: JClass,
     current_app_version: JString,
 ) -> jstring {
-    let version: String = env.get_string(&current_app_version).unwrap().into();
-    let update = check_app_update(&version);
+    env.with_env(|env| -> jni::errors::Result<jstring> {
+        let version = current_app_version.try_to_string(env).unwrap();
+        let update = check_app_update(&version);
 
-    let result = UpdateCheckResult { app_update: update };
-    let json_str = serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_string());
+        let result = UpdateCheckResult { app_update: update };
+        let json_str = serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_string());
 
-    let output = env.new_string(json_str).unwrap();
-    output.into_raw()
+        let output = env.new_string(json_str).unwrap();
+        Ok(output.into_raw())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_xaozora_manager_core_network_UpdateManager_performAppUpdate(
-    mut env: JNIEnv,
+pub extern "system" fn Java_com_xaozora_manager_core_network_UpdateManager_performAppUpdate<
+    'local,
+>(
+    mut env: EnvUnowned<'local>,
     _class: JClass,
     apk_url: JString,
     apk_temp_path: JString,
 ) -> jboolean {
-    let url: String = env.get_string(&apk_url).unwrap().into();
-    let path: String = env.get_string(&apk_temp_path).unwrap().into();
-
-    if perform_app_update(&url, &path) {
-        1
-    } else {
-        0
-    }
+    env.with_env(|env| -> jni::errors::Result<jboolean> {
+        let url = apk_url.try_to_string(env).unwrap();
+        let path = apk_temp_path.try_to_string(env).unwrap();
+        Ok(perform_app_update(&url, &path))
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }

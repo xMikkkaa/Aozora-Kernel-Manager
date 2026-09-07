@@ -1,6 +1,6 @@
 use jni::objects::{JClass, JString};
 use jni::sys::jstring;
-use jni::JNIEnv;
+use jni::{errors::ThrowRuntimeExAndDefault, EnvUnowned};
 use serde::Serialize;
 
 use crate::utils::shell::{check_file_exists, execute_cmd, read_system_file};
@@ -126,65 +126,79 @@ pub fn get_battery_notification_data() -> BatteryNotificationData {
 pub extern "system" fn Java_com_xaozora_manager_services_ProfileTileService_getActiveProfile<
     'local,
 >(
-    env: JNIEnv<'local>,
+    mut env: EnvUnowned<'local>,
     _class: JClass,
 ) -> jstring {
-    let profile = get_active_profile();
-    let output = env.new_string(profile).unwrap();
-    output.into_raw()
+    env.with_env(|env| -> jni::errors::Result<jstring> {
+        let profile = get_active_profile();
+        let output = env.new_string(profile).unwrap();
+        Ok(output.into_raw())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_xaozora_manager_services_ProfileTileService_getAvailableProfilesJson<
     'local,
 >(
-    env: JNIEnv<'local>,
+    mut env: EnvUnowned<'local>,
     _class: JClass,
 ) -> jstring {
-    let profiles = get_available_profiles();
-    let json_str = serde_json::to_string(&profiles).unwrap_or_else(|_| "[]".to_string());
-    let output = env.new_string(json_str).unwrap();
-    output.into_raw()
+    env.with_env(|env| -> jni::errors::Result<jstring> {
+        let profiles = get_available_profiles();
+        let json_str = serde_json::to_string(&profiles).unwrap_or_else(|_| "[]".to_string());
+        let output = env.new_string(json_str).unwrap();
+        Ok(output.into_raw())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_xaozora_manager_services_ProfileTileService_applyProfile(
-    mut env: JNIEnv,
+    mut env: EnvUnowned,
     _class: JClass,
     profile_id: JString,
 ) {
-    let profile: String = env.get_string(&profile_id).unwrap().into();
-    apply_profile(&profile);
+    let _ = env
+        .with_env(|env| -> jni::errors::Result<()> {
+            let profile = profile_id.try_to_string(env).unwrap();
+            apply_profile(&profile);
+            Ok(())
+        })
+        .resolve::<ThrowRuntimeExAndDefault>();
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_xaozora_manager_services_MonitorService_updatePowerSaveState(
-    _env: JNIEnv,
+    _env: EnvUnowned,
     _class: JClass,
     is_power_save: jni::sys::jboolean,
 ) {
-    update_power_save_state(is_power_save != 0);
+    update_power_save_state(is_power_save);
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_xaozora_manager_services_MonitorService_resetBatteryStats(
-    _env: JNIEnv,
+    _env: EnvUnowned,
     _class: JClass,
     enable_autd: jni::sys::jboolean,
     enable_battmon: jni::sys::jboolean,
 ) {
-    reset_battery_stats(enable_autd != 0, enable_battmon != 0);
+    reset_battery_stats(enable_autd, enable_battmon);
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_xaozora_manager_services_MonitorService_getBatteryNotificationDataJson<
     'local,
 >(
-    env: JNIEnv<'local>,
+    mut env: EnvUnowned<'local>,
     _class: JClass,
 ) -> jstring {
-    let data = get_battery_notification_data();
-    let json_str = serde_json::to_string(&data).unwrap_or_else(|_| "{}".to_string());
-    let output = env.new_string(json_str).unwrap();
-    output.into_raw()
+    env.with_env(|env| -> jni::errors::Result<jstring> {
+        let data = get_battery_notification_data();
+        let json_str = serde_json::to_string(&data).unwrap_or_else(|_| "{}".to_string());
+        let output = env.new_string(json_str).unwrap();
+        Ok(output.into_raw())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }

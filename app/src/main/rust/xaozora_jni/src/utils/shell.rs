@@ -85,76 +85,83 @@ pub fn check_file_exists(path: &str) -> bool {
 
 use jni::objects::{JClass, JString};
 use jni::sys::{jboolean, jstring};
-use jni::JNIEnv;
+use jni::{errors::ThrowRuntimeExAndDefault, EnvUnowned};
 
 #[no_mangle]
-pub extern "system" fn Java_com_xaozora_manager_core_shell_RootShellHelper_executeCmd(
-    mut env: JNIEnv,
+pub extern "system" fn Java_com_xaozora_manager_core_shell_RootShellHelper_executeCmd<'local>(
+    mut env: EnvUnowned<'local>,
     _class: JClass,
     cmd: JString,
 ) -> jboolean {
-    let cmd: String = env.get_string(&cmd).unwrap().into();
-    if execute_cmd(&cmd) {
-        1
-    } else {
-        0
-    }
+    env.with_env(|env| -> jni::errors::Result<jboolean> {
+        let cmd = cmd.try_to_string(env).unwrap();
+        Ok(execute_cmd(&cmd))
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_xaozora_manager_core_shell_RootShellHelper_executeCmdAndGetOutput<
     'local,
 >(
-    mut env: JNIEnv<'local>,
+    mut env: EnvUnowned<'local>,
     _class: JClass,
     cmd: JString,
 ) -> jstring {
-    let cmd: String = env.get_string(&cmd).unwrap().into();
-    let res = execute_cmd_and_get_output(&cmd);
-    let output = env.new_string(res).unwrap();
-    output.into_raw()
+    env.with_env(|env| -> jni::errors::Result<jstring> {
+        let cmd = cmd.try_to_string(env).unwrap();
+        let res = execute_cmd_and_get_output(&cmd);
+        let output = env.new_string(res).unwrap();
+        Ok(output.into_raw())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_xaozora_manager_core_shell_RootShellHelper_readSystemFile<
     'local,
 >(
-    mut env: JNIEnv<'local>,
+    mut env: EnvUnowned<'local>,
     _class: JClass,
     path: JString,
 ) -> jstring {
-    let path: String = env.get_string(&path).unwrap().into();
-    let res = read_system_file(&path);
-    let output = env.new_string(res).unwrap();
-    output.into_raw()
+    env.with_env(|env| -> jni::errors::Result<jstring> {
+        let path = path.try_to_string(env).unwrap();
+        let res = read_system_file(&path);
+        let output = env.new_string(res).unwrap();
+        Ok(output.into_raw())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_xaozora_manager_core_shell_RootShellHelper_writeSystemFile(
-    mut env: JNIEnv,
+pub extern "system" fn Java_com_xaozora_manager_core_shell_RootShellHelper_writeSystemFile<
+    'local,
+>(
+    mut env: EnvUnowned<'local>,
     _class: JClass,
     path: JString,
     value: JString,
 ) -> jboolean {
-    let path: String = env.get_string(&path).unwrap().into();
-    let value: String = env.get_string(&value).unwrap().into();
-    if write_system_file(&path, &value) {
-        1
-    } else {
-        0
-    }
+    env.with_env(|env| -> jni::errors::Result<jboolean> {
+        let path = path.try_to_string(env).unwrap();
+        let value = value.try_to_string(env).unwrap();
+        Ok(write_system_file(&path, &value))
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_xaozora_manager_core_shell_RootShellHelper_checkFileExists(
-    mut env: JNIEnv,
+pub extern "system" fn Java_com_xaozora_manager_core_shell_RootShellHelper_checkFileExists<
+    'local,
+>(
+    mut env: EnvUnowned<'local>,
     _class: JClass,
     path: JString,
 ) -> jboolean {
-    let path: String = env.get_string(&path).unwrap().into();
-    if check_file_exists(&path) {
-        1
-    } else {
-        0
-    }
+    env.with_env(|env| -> jni::errors::Result<jboolean> {
+        let path = path.try_to_string(env).unwrap();
+        Ok(check_file_exists(&path))
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }

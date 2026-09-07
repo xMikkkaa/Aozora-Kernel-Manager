@@ -1,6 +1,6 @@
 use jni::objects::{JClass, JString};
 use jni::sys::jstring;
-use jni::JNIEnv;
+use jni::{errors::ThrowRuntimeExAndDefault, EnvUnowned};
 use serde::{Deserialize, Serialize};
 
 use crate::utils::shell::{execute_cmd, read_system_file};
@@ -82,31 +82,41 @@ pub fn apply_cluster_config(cluster_cpu_id: i32, min_freq: &str, max_freq: &str,
 pub extern "system" fn Java_com_xaozora_manager_core_utils_CpuControlUtils_getClusterConfigJson<
     'local,
 >(
-    mut env: JNIEnv<'local>,
+    mut env: EnvUnowned<'local>,
     _class: JClass,
     cluster_cpu_id: jni::sys::jint,
     name: JString,
 ) -> jstring {
-    let name: String = env.get_string(&name).unwrap().into();
-    let config = get_cluster_config(cluster_cpu_id as i32, &name);
+    env.with_env(|env| -> jni::errors::Result<jstring> {
+        let name = name.try_to_string(env).unwrap();
+        let config = get_cluster_config(cluster_cpu_id as i32, &name);
 
-    let json_str = serde_json::to_string(&config).unwrap_or_else(|_| "{}".to_string());
-    let output = env.new_string(json_str).unwrap();
-    output.into_raw()
+        let json_str = serde_json::to_string(&config).unwrap_or_else(|_| "{}".to_string());
+        let output = env.new_string(json_str).unwrap();
+        Ok(output.into_raw())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_xaozora_manager_core_utils_CpuControlUtils_applyClusterConfig(
-    mut env: JNIEnv,
+pub extern "system" fn Java_com_xaozora_manager_core_utils_CpuControlUtils_applyClusterConfig<
+    'local,
+>(
+    mut env: EnvUnowned<'local>,
     _class: JClass,
     cluster_cpu_id: jni::sys::jint,
     min_freq: JString,
     max_freq: JString,
     governor: JString,
 ) {
-    let min_freq: String = env.get_string(&min_freq).unwrap().into();
-    let max_freq: String = env.get_string(&max_freq).unwrap().into();
-    let governor: String = env.get_string(&governor).unwrap().into();
+    let _ = env
+        .with_env(|env| -> jni::errors::Result<()> {
+            let min_freq = min_freq.try_to_string(env).unwrap();
+            let max_freq = max_freq.try_to_string(env).unwrap();
+            let governor = governor.try_to_string(env).unwrap();
 
-    apply_cluster_config(cluster_cpu_id as i32, &min_freq, &max_freq, &governor);
+            apply_cluster_config(cluster_cpu_id as i32, &min_freq, &max_freq, &governor);
+            Ok(())
+        })
+        .resolve::<ThrowRuntimeExAndDefault>();
 }

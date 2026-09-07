@@ -1,6 +1,6 @@
 use jni::objects::JClass;
 use jni::sys::jstring;
-use jni::JNIEnv;
+use jni::{errors::ThrowRuntimeExAndDefault, EnvUnowned};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -531,38 +531,44 @@ pub fn poll_hardware() -> RealTimeMetrics {
 pub extern "system" fn Java_com_xaozora_manager_core_utils_SystemInfoUtils_fetchSystemInfoJson<
     'local,
 >(
-    env: JNIEnv<'local>,
+    mut env: EnvUnowned<'local>,
     _class: JClass,
 ) -> jstring {
-    let info = fetch_system_info();
-    let json_str = serde_json::to_string(&info).unwrap_or_else(|_| "{}".to_string());
-    let output = env.new_string(json_str).unwrap();
-    output.into_raw()
+    env.with_env(|env| -> jni::errors::Result<jstring> {
+        let info = fetch_system_info();
+        let json_str = serde_json::to_string(&info).unwrap_or_else(|_| "{}".to_string());
+        let output = env.new_string(json_str).unwrap();
+        Ok(output.into_raw())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_xaozora_manager_core_utils_SystemInfoUtils_pollHardwareJson<
     'local,
 >(
-    env: JNIEnv<'local>,
+    mut env: EnvUnowned<'local>,
     _class: JClass,
 ) -> jstring {
-    let metrics = poll_hardware();
-    let json_str = serde_json::to_string(&metrics).unwrap_or_else(|_| "{}".to_string());
-    let output = env.new_string(json_str).unwrap();
-    output.into_raw()
+    env.with_env(|env| -> jni::errors::Result<jstring> {
+        let metrics = poll_hardware();
+        let json_str = serde_json::to_string(&metrics).unwrap_or_else(|_| "{}".to_string());
+        let output = env.new_string(json_str).unwrap();
+        Ok(output.into_raw())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_xaozora_manager_core_utils_SystemInfoUtils_updateSystemState<
     'local,
 >(
-    _env: JNIEnv<'local>,
+    _env: EnvUnowned<'local>,
     _class: JClass,
     bat_level: jni::sys::jint,
     is_screen_on: jni::sys::jboolean,
 ) {
-    let scr = if is_screen_on != 0 { "1" } else { "0" };
+    let scr = if is_screen_on { "1" } else { "0" };
     let msg = format!("BAT:{}|SCR:{}\n", bat_level, scr);
 
     use std::fs::OpenOptions;

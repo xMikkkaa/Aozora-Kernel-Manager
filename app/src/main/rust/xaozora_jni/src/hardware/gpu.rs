@@ -1,6 +1,6 @@
 use jni::objects::{JClass, JString};
 use jni::sys::jstring;
-use jni::JNIEnv;
+use jni::{errors::ThrowRuntimeExAndDefault, EnvUnowned};
 use serde::{Deserialize, Serialize};
 
 use crate::utils::shell::{check_file_exists, execute_cmd, read_system_file};
@@ -100,35 +100,45 @@ pub fn apply_gpu_config(
 pub extern "system" fn Java_com_xaozora_manager_core_utils_GpuControlUtils_getGpuConfigJson<
     'local,
 >(
-    env: JNIEnv<'local>,
+    mut env: EnvUnowned<'local>,
     _class: JClass,
 ) -> jstring {
-    let config = get_gpu_config();
-    let json_str = serde_json::to_string(&config).unwrap_or_else(|_| "{}".to_string());
-    let output = env.new_string(json_str).unwrap();
-    output.into_raw()
+    env.with_env(|env| -> jni::errors::Result<jstring> {
+        let config = get_gpu_config();
+        let json_str = serde_json::to_string(&config).unwrap_or_else(|_| "{}".to_string());
+        let output = env.new_string(json_str).unwrap();
+        Ok(output.into_raw())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_xaozora_manager_core_utils_GpuControlUtils_applyGpuConfig(
-    mut env: JNIEnv,
+pub extern "system" fn Java_com_xaozora_manager_core_utils_GpuControlUtils_applyGpuConfig<
+    'local,
+>(
+    mut env: EnvUnowned<'local>,
     _class: JClass,
     min_freq: JString,
     max_freq: JString,
     governor: JString,
     adreno_boost: JString,
 ) {
-    let min_freq: String = env.get_string(&min_freq).unwrap().into();
-    let max_freq: String = env.get_string(&max_freq).unwrap().into();
-    let governor: String = env.get_string(&governor).unwrap().into();
+    let _ = env
+        .with_env(|env| -> jni::errors::Result<()> {
+            let min_freq = min_freq.try_to_string(env).unwrap();
+            let max_freq = max_freq.try_to_string(env).unwrap();
+            let governor = governor.try_to_string(env).unwrap();
 
-    let adreno_boost_val: Option<String> = if adreno_boost.is_null() {
-        None
-    } else {
-        Some(env.get_string(&adreno_boost).unwrap().into())
-    };
+            let adreno_boost_val: Option<String> = if adreno_boost.is_null() {
+                None
+            } else {
+                Some(adreno_boost.try_to_string(env).unwrap())
+            };
 
-    let adreno_boost_ref = adreno_boost_val.as_deref();
+            let adreno_boost_ref = adreno_boost_val.as_deref();
 
-    apply_gpu_config(&min_freq, &max_freq, &governor, adreno_boost_ref);
+            apply_gpu_config(&min_freq, &max_freq, &governor, adreno_boost_ref);
+            Ok(())
+        })
+        .resolve::<ThrowRuntimeExAndDefault>();
 }

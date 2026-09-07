@@ -1,6 +1,6 @@
 use jni::objects::{JClass, JString};
 use jni::sys::jstring;
-use jni::JNIEnv;
+use jni::{errors::ThrowRuntimeExAndDefault, EnvUnowned};
 use serde::{Deserialize, Serialize};
 
 use crate::utils::shell::read_system_file;
@@ -55,14 +55,17 @@ pub fn get_configured_apps(app_list_path: &str) -> Vec<ConfiguredApp> {
 pub extern "system" fn Java_com_xaozora_manager_core_utils_AppManagerUtils_getConfiguredAppsJson<
     'local,
 >(
-    mut env: JNIEnv<'local>,
+    mut env: EnvUnowned<'local>,
     _class: JClass,
     app_list_path: JString,
 ) -> jstring {
-    let path: String = env.get_string(&app_list_path).unwrap().into();
-    let apps = get_configured_apps(&path);
+    env.with_env(|env| -> jni::errors::Result<jstring> {
+        let path = app_list_path.try_to_string(env).unwrap();
+        let apps = get_configured_apps(&path);
 
-    let json_str = serde_json::to_string(&apps).unwrap_or_else(|_| "[]".to_string());
-    let output = env.new_string(json_str).unwrap();
-    output.into_raw()
+        let json_str = serde_json::to_string(&apps).unwrap_or_else(|_| "[]".to_string());
+        let output = env.new_string(json_str).unwrap();
+        Ok(output.into_raw())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }
