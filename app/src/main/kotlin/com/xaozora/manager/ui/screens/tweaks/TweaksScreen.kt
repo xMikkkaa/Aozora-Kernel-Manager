@@ -181,7 +181,6 @@ fun TweaksScreen(
                   pm list packages -3 | cut -d':' -f2 | grep -v "com.xaozora.manager" | while read -r app; do
                       am force-stop "${'$'}app"
                   done;
-                  fstrim -v /data;
                 ) &
             """.trimIndent()
             
