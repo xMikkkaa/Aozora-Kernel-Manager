@@ -16,8 +16,8 @@ android {
     namespace = "com.xaozora.manager"
     ndkVersion = "27.0.12077973"
     compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
+        version = release(37) {
+            minorApiLevel = 2
         }
     }
 
