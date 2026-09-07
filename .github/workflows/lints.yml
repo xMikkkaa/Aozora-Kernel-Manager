@@ -1,16 +1,59 @@
 name: Lints & Tests
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 on:
   push:
     branches:
       - kotlin
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - 'assets/icon/**'
   pull_request:
     branches:
       - kotlin
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - 'assets/icon/**'
 
 jobs:
+  changes:
+    name: Detect Changed Domains
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      android: ${{ steps.filter.outputs.android }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Detect Changes Per Domain
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            rust:
+              - 'app/src/main/rust/**'
+            android:
+              - 'app/src/main/kotlin/**'
+              - 'app/src/main/res/**'
+              - '*.gradle.kts'
+              - '**/*.gradle.kts'
+              - 'gradle/**'
+
   android-lint-and-test:
     name: Android Lint & Unit Tests
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -22,36 +65,14 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
       
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android
-
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            app/src/main/rust/xaozora_jni
-            app/src/main/rust/xaozora_daemon
-
-      - name: Install cargo-ndk
-        run: cargo install cargo-ndk
-
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
-
-      - name: Setup Dummy Keystore Config
-        run: |
-          echo "storeFile=app/dummy.jks" > key.properties
-          echo "storePassword=dummy" >> key.properties
-          echo "keyAlias=dummy" >> key.properties
-          echo "keyPassword=dummy" >> key.properties
       
       - name: Run Android Lint
         run: ./gradlew lintDebug
       
       - name: Run Android Unit Tests
-        run: ./gradlew testDebugUnitTest || true # Continue even if no tests exist yet
+        run: ./gradlew testDebugUnitTest
       
       - name: Upload Lint Report (If Failed)
         uses: actions/upload-artifact@v7
@@ -63,37 +84,28 @@ jobs:
 
   rust-lint-and-test:
     name: Rust Fmt, Clippy & Tests
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
       
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust + NDK
+        uses: ./.github/actions/setup-rust-ndk
         with:
-          targets: aarch64-linux-android
           components: rustfmt, clippy
-
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            app/src/main/rust/xaozora_jni
-            app/src/main/rust/xaozora_daemon
-      
-      - name: Install cargo-ndk
-        run: cargo install cargo-ndk
       
       - name: Check Rust JNI
         working-directory: app/src/main/rust/xaozora_jni
         run: |
           cargo fmt -- --check
-          cargo ndk -t arm64-v8a clippy
-          cargo test || true # Run tests if any exist
+          cargo ndk -t arm64-v8a clippy -- -D warnings
+          cargo test
           
       - name: Check Rust Daemon (AUTD)
         working-directory: app/src/main/rust/xaozora_daemon
         run: |
           cargo fmt -- --check
-          cargo ndk -t arm64-v8a clippy
-          cargo test || true # Run tests if any exist
+          cargo ndk -t arm64-v8a clippy -- -D warnings
+          cargo test

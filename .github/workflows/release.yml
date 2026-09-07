@@ -23,20 +23,8 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android
-
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            app/src/main/rust/xaozora_jni
-            app/src/main/rust/xaozora_daemon
-
-      - name: Install cargo-ndk
-        run: cargo install cargo-ndk
+      - name: Setup Rust + NDK
+        uses: ./.github/actions/setup-rust-ndk
 
       - name: Setup Keystore
         env:
@@ -63,6 +51,51 @@ jobs:
 
       - name: Build APK
         run: ./gradlew assembleRelease
+
+      - name: Stage Fresh APK
+        run: |
+          mkdir -p app/release
+          cp app/build/outputs/apk/release/app-release.apk app/release/app-release.apk
+
+      - name: Verify APK Signature & Native Libs
+        if: hashFiles('app/release/app-release.apk') != ''
+        run: |
+          APK="app/release/app-release.apk"
+          APKSIGNER=""
+          for f in "$ANDROID_HOME"/build-tools/*/apksigner; do
+            if [ -x "$f" ]; then
+              APKSIGNER="$f"
+              break
+            fi
+          done
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner not found under $ANDROID_HOME/build-tools. A runner with full Android SDK build-tools is required."
+            exit 1
+          fi
+          "$APKSIGNER" verify --print-certs "$APK"
+          echo "--- arm64-v8a libs in APK ---"
+          unzip -l "$APK" | grep "lib/arm64-v8a/" || echo "(no arm64-v8a libs listed)"
+          if unzip -l "$APK" | grep -q "lib/arm64-v8a/libnative\.so"; then
+            echo "OK: lib/arm64-v8a/libnative.so present in $APK"
+          else
+            echo "::error::lib/arm64-v8a/libnative.so is missing from $APK"
+            exit 1
+          fi
+
+      - name: Generate SBOM (APK)
+        uses: anchore/sbom-action@v0
+        with:
+          path: app/release/app-release.apk
+          format: spdx-json
+          output-file: sbom-apk.spdx.json
+          upload-artifact: false
+
+      - name: Upload SBOM Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: SBOM-${{ github.ref_name }}
+          path: sbom-apk.spdx.json
+          retention-days: 14
 
       - name: Generate Changelog
         id: changelog
@@ -101,3 +134,15 @@ jobs:
           files: app/release/app-release.apk
           draft: false
           prerelease: false
+
+      - name: Write Firebase Service Account
+        run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "${{ runner.temp }}/firebase-sa.json"
+
+      - name: Upload to Firebase App Distribution
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: ${{ secrets.FIREBASE_APP_ID }}
+          serviceCredentialsFile: ${{ runner.temp }}/firebase-sa.json
+          file: app/release/app-release.apk
+          groups: internal-testers
+          releaseNotes: ${{ env.CHANGELOG }}
