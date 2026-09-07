@@ -137,14 +137,14 @@ fun TweaksScreen(
             
             val procVersion = RootShellHelper.executeCmdAndGetOutput("cat /proc/version").lowercase()
             val isAozora = procVersion.contains("aozora-v9") || procVersion.contains("aozora-v10")
-            val isChimera = procVersion.contains("chimera")
+            val bypassChargingNode = "/sys/kernel/bypass_charge/bypass_charging"
             
             if (isAozora) {
                 isSupportedKernel = true
                 bypassNode = "/sys/class/power_supply/battery/input_suspend"
-            } else if (isChimera) {
+            } else if (RootShellHelper.checkFileExists(bypassChargingNode)) {
                 isSupportedKernel = true
-                bypassNode = "/sys/kernel/bypass_charge/bypass_charging"
+                bypassNode = bypassChargingNode
             } else {
                 isSupportedKernel = false
             }
