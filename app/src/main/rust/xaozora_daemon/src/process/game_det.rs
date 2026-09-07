@@ -127,7 +127,10 @@ pub fn find_game_process() -> Option<(String, String, i32)> {
                                 continue;
                             }
 
-                            let null_pos = cmdline_bytes.iter().position(|&x| x == 0).unwrap_or(cmdline_bytes.len());
+                            let null_pos = cmdline_bytes
+                                .iter()
+                                .position(|&x| x == 0)
+                                .unwrap_or(cmdline_bytes.len());
                             let mut name_slice = &cmdline_bytes[..null_pos];
 
                             if let Some(slash_pos) = name_slice.iter().rposition(|&x| x == b'/') {
@@ -139,7 +142,8 @@ pub fn find_game_process() -> Option<(String, String, i32)> {
                             for entry in &cache.1 {
                                 let base_len = entry.base.len();
                                 if name_slice.starts_with(&entry.base) {
-                                    if name_slice.len() == base_len || name_slice[base_len] == b':' {
+                                    if name_slice.len() == base_len || name_slice[base_len] == b':'
+                                    {
                                         return Some((
                                             String::from_utf8_lossy(&entry.base).into_owned(),
                                             entry.chosen_mode.clone(),

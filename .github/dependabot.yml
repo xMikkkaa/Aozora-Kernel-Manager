@@ -1,0 +1,41 @@
+version: 2
+updates:
+  # 1. Update Gradle dependencies (Kotlin/Android)
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      gradle-deps:
+        patterns:
+          - "*"
+
+  # 2. Update Cargo dependencies (Rust JNI)
+  - package-ecosystem: "cargo"
+    directory: "/app/src/main/rust/xaozora_jni"
+    schedule:
+      interval: "weekly"
+    groups:
+      cargo-jni:
+        patterns:
+          - "*"
+
+  # 3. Update Cargo dependencies (Rust Daemon)
+  - package-ecosystem: "cargo"
+    directory: "/app/src/main/rust/xaozora_daemon"
+    schedule:
+      interval: "weekly"
+    groups:
+      cargo-daemon:
+        patterns:
+          - "*"
+
+  # 4. Update GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns:
+          - "*"

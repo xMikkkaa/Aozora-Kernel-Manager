@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # Fetch all history for accurate changelog generation
+
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app/src/main/rust/xaozora_jni
+            app/src/main/rust/xaozora_daemon
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+
+      - name: Setup Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ ! -z "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > app/aozora.jks
+            {
+              echo "storeFile=app/aozora.jks"
+              echo "storePassword=$KEYSTORE_PASSWORD"
+              echo "keyAlias=$KEY_ALIAS"
+              echo "keyPassword=$KEY_PASSWORD"
+            } > key.properties
+          else
+            echo "Error: KEYSTORE_BASE64 missing. Refusing to create a release without proper signing key!"
+            exit 1
+          fi
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build APK
+        run: ./gradlew assembleRelease
+
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          # Get the previous tag (looking before HEAD)
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          echo "Generating changelog..."
+          if [ -z "$LAST_TAG" ]; then
+            git log -n 10 --pretty=format:"* %s" > changelog.txt
+          else
+            git log ${LAST_TAG}..HEAD --pretty=format:"* %s" > changelog.txt
+          fi
+          
+          # Beautify common commit prefixes
+          sed -i -E 's/\* (feat|Feat):/* ✨ Feature:/g' changelog.txt
+          sed -i -E 's/\* (fix|Fix):/* 🐛 Fix:/g' changelog.txt
+          sed -i -E 's/\* (docs|Docs):/* 📝 Docs:/g' changelog.txt
+          sed -i -E 's/\* (chore|Chore):/* 🔧 Chore:/g' changelog.txt
+          
+          # Pass the changelog to GitHub Actions environment variable
+          {
+            echo 'CHANGELOG<<EOF'
+            cat changelog.txt
+            echo
+            echo 'EOF'
+          } >> "$GITHUB_ENV"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: Aozora Manager ${{ github.ref_name }}
+          body: |
+            ### What's New in ${{ github.ref_name }}
+            ${{ env.CHANGELOG }}
+          files: app/release/app-release.apk
+          draft: false
+          prerelease: false

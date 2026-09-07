@@ -14,18 +14,18 @@
  * limitations under the License.
  */
 
+mod autd;
 mod config;
+mod ipc;
 mod monitor;
 mod process;
 mod utils;
-mod autd;
-mod ipc;
 
+use std::env;
 use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, sleep};
 use std::time::Duration;
-use std::env;
 
 pub static RUNNING: AtomicBool = AtomicBool::new(true);
 
@@ -37,8 +37,14 @@ fn main() {
     config::setup_android_env();
 
     unsafe {
-        libc::signal(libc::SIGTERM, signal_handler as *const () as libc::sighandler_t);
-        libc::signal(libc::SIGINT, signal_handler as *const () as libc::sighandler_t);
+        libc::signal(
+            libc::SIGTERM,
+            signal_handler as *const () as libc::sighandler_t,
+        );
+        libc::signal(
+            libc::SIGINT,
+            signal_handler as *const () as libc::sighandler_t,
+        );
     }
 
     let args: Vec<String> = env::args().collect();
@@ -104,7 +110,9 @@ fn main() {
     }
 
     if handles.is_empty() && !reset_stats {
-        println!("Usage: xaozora_daemon [--enable-autd | --disable-autd] [--reset-stats] [--battery-logger <output_json_path>]");
+        println!(
+            "Usage: xaozora_daemon [--enable-autd | --disable-autd] [--reset-stats] [--battery-logger <output_json_path>]"
+        );
         let _ = fs::remove_file(&pid_path);
         std::process::exit(1);
     }

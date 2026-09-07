@@ -1,9 +1,9 @@
-use serde::{Serialize, Deserialize};
-use jni::JNIEnv;
 use jni::objects::{JClass, JString};
 use jni::sys::jstring;
+use jni::JNIEnv;
+use serde::{Deserialize, Serialize};
 
-use crate::utils::shell::{read_system_file, execute_cmd, check_file_exists};
+use crate::utils::shell::{check_file_exists, execute_cmd, read_system_file};
 
 const BASE_PATH: &str = "/sys/kernel/gpu";
 const DEVFREQ_PATH: &str = "/sys/class/kgsl/kgsl-3d0/devfreq";
@@ -64,7 +64,12 @@ pub fn get_gpu_config() -> GpuConfig {
     }
 }
 
-pub fn apply_gpu_config(min_freq: &str, max_freq: &str, governor: &str, adreno_boost: Option<&str>) {
+pub fn apply_gpu_config(
+    min_freq: &str,
+    max_freq: &str,
+    governor: &str,
+    adreno_boost: Option<&str>,
+) {
     // Governor
     execute_cmd(&format!("chmod 644 {}/gpu_governor", BASE_PATH));
     execute_cmd(&format!("echo {} > {}/gpu_governor", governor, BASE_PATH));
@@ -92,7 +97,9 @@ pub fn apply_gpu_config(min_freq: &str, max_freq: &str, governor: &str, adreno_b
 // JNI bindings
 
 #[no_mangle]
-pub extern "system" fn Java_com_xaozora_manager_core_utils_GpuControlUtils_getGpuConfigJson<'local>(
+pub extern "system" fn Java_com_xaozora_manager_core_utils_GpuControlUtils_getGpuConfigJson<
+    'local,
+>(
     env: JNIEnv<'local>,
     _class: JClass,
 ) -> jstring {
@@ -114,14 +121,14 @@ pub extern "system" fn Java_com_xaozora_manager_core_utils_GpuControlUtils_apply
     let min_freq: String = env.get_string(&min_freq).unwrap().into();
     let max_freq: String = env.get_string(&max_freq).unwrap().into();
     let governor: String = env.get_string(&governor).unwrap().into();
-    
+
     let adreno_boost_val: Option<String> = if adreno_boost.is_null() {
         None
     } else {
         Some(env.get_string(&adreno_boost).unwrap().into())
     };
-    
+
     let adreno_boost_ref = adreno_boost_val.as_deref();
-    
+
     apply_gpu_config(&min_freq, &max_freq, &governor, adreno_boost_ref);
 }

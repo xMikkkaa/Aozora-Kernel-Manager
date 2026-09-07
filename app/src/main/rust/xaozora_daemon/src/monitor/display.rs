@@ -27,7 +27,7 @@ pub fn log_active_method(method: &str) {
             if let Ok(mut file) = File::create(crate::config::AUTD_AWAKE_DEBUG_LOG) {
                 let _ = writeln!(file, "Active Method: {}", method);
             }
-            
+
             last_method.clear();
             last_method.push_str(method);
         }
@@ -54,7 +54,7 @@ pub fn is_awake() -> bool {
                         break;
                     }
                 }
-                
+
                 if has_digit {
                     log_active_method("SysFS Backlight");
                     return val > 0;

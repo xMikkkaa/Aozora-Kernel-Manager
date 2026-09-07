@@ -13,14 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
- 
+
 use std::fmt::Write;
 use std::fs;
 use std::sync::atomic::Ordering;
 use std::thread::sleep;
 use std::time::Duration;
 
-use crate::{config, monitor, process, utils, RUNNING};
+use crate::{RUNNING, config, monitor, process, utils};
 
 pub fn perform_cleanup() -> bool {
     let mut actually_cleaned = false;
@@ -59,7 +59,7 @@ pub fn run_autd() {
     interruptible_sleep(1);
     monitor::battery::init_backup_once();
     monitor::battery::reset_charging_states();
-    
+
     let mut last_hydra_pid: i32 = 0;
     let mut sched_lib_active = false;
 
@@ -72,7 +72,10 @@ pub fn run_autd() {
     unsafe {
         libc::mkfifo(c_path.as_ptr(), 0o666);
     }
-    let _ = std::process::Command::new("chmod").arg("666").arg(fifo_path).status();
+    let _ = std::process::Command::new("chmod")
+        .arg("666")
+        .arg(fifo_path)
+        .status();
 
     let mut fifo_file = fs::OpenOptions::new()
         .read(true)
@@ -93,7 +96,11 @@ pub fn run_autd() {
             utils::cmd::send_toast("Deep Sleep Protocol: Active");
 
             while !is_awake_state && RUNNING.load(Ordering::SeqCst) {
-                let mut pfd = libc::pollfd { fd: fifo_fd, events: libc::POLLIN, revents: 0 };
+                let mut pfd = libc::pollfd {
+                    fd: fifo_fd,
+                    events: libc::POLLIN,
+                    revents: 0,
+                };
                 let ret = unsafe { libc::poll(&mut pfd, 1, -1) };
                 if ret > 0 && (pfd.revents & libc::POLLIN) != 0 {
                     let mut buf = [0u8; 128];
@@ -109,7 +116,7 @@ pub fn run_autd() {
                     }
                 }
             }
-            
+
             if RUNNING.load(Ordering::SeqCst) {
                 monitor::display::log_active_method("Screen back ON. Resuming normal operation.");
                 utils::cmd::send_toast("Resuming Normal Operation");
@@ -136,7 +143,8 @@ pub fn run_autd() {
             true
         };
 
-        let is_idle_charging_enabled = if let Ok(bytes) = fs::read(config::AUTD_IDLE_CHARGING_PATH) {
+        let is_idle_charging_enabled = if let Ok(bytes) = fs::read(config::AUTD_IDLE_CHARGING_PATH)
+        {
             bytes.first() == Some(&b'1')
         } else {
             false
@@ -166,11 +174,11 @@ pub fn run_autd() {
         if let Some((current_game, chosen_mode, game_pid)) = game_check {
             if last_mode != chosen_mode {
                 utils::cmd::apply_mode(&chosen_mode);
-                
+
                 msg_buffer.clear();
                 let _ = write!(msg_buffer, "Game: {} (Mode: {})", current_game, chosen_mode);
                 utils::cmd::send_toast(&msg_buffer);
-                
+
                 last_mode.clear();
                 last_mode.push_str(&chosen_mode);
                 idle_cycles = 0;
@@ -190,10 +198,11 @@ pub fn run_autd() {
                         }
                         process::thread_opt::optimize_game_threads(game_pid);
                     }
-                    
+
                     if sched_lib_supported && !sched_lib_active {
                         let _ = fs::write(config::KERNEL_SCHED_LIB_MASK_PATH, "255");
-                        let _ = fs::write(config::KERNEL_SCHED_LIB_NAME_PATH, config::SCHED_LIB_GAMES);
+                        let _ =
+                            fs::write(config::KERNEL_SCHED_LIB_NAME_PATH, config::SCHED_LIB_GAMES);
                         sched_lib_active = true;
                     }
                 } else {
@@ -212,7 +221,7 @@ pub fn run_autd() {
             if last_mode != "powersave" {
                 utils::cmd::apply_mode("powersave");
                 utils::cmd::send_toast("Mode: Powersave (Battery Low/System Saver)");
-                
+
                 last_mode.clear();
                 last_mode.push_str("powersave");
                 idle_cycles = 0;
@@ -229,11 +238,11 @@ pub fn run_autd() {
         } else {
             if last_mode != user_base {
                 utils::cmd::apply_mode(&user_base);
-                
+
                 msg_buffer.clear();
                 let _ = write!(msg_buffer, "Mode: {}", user_base);
                 utils::cmd::send_toast(&msg_buffer);
-                
+
                 last_mode.clear();
                 last_mode.push_str(&user_base);
                 idle_cycles = 0;
@@ -265,7 +274,11 @@ pub fn run_autd() {
         }
 
         let timeout_ms = if idle_cycles > 10 { 10000 } else { 3000 };
-        let mut pfd = libc::pollfd { fd: fifo_fd, events: libc::POLLIN, revents: 0 };
+        let mut pfd = libc::pollfd {
+            fd: fifo_fd,
+            events: libc::POLLIN,
+            revents: 0,
+        };
         let ret = unsafe { libc::poll(&mut pfd, 1, timeout_ms) };
         if ret > 0 && (pfd.revents & libc::POLLIN) != 0 {
             let mut buf = [0u8; 128];

@@ -15,14 +15,13 @@
  */
 
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::os::unix::fs::PermissionsExt;
 
 static IS_IDLE_CHARGING_ACTIVE: AtomicBool = AtomicBool::new(false);
 static ORIGINAL_CURRENTS: Mutex<Option<Vec<(String, String)>>> = Mutex::new(None);
-
 
 pub struct ChargeSwitch {
     pub path: &'static str,
@@ -31,11 +30,24 @@ pub struct ChargeSwitch {
     pub use_max: bool,
 }
 
-static SWITCH_CHIMERA: ChargeSwitch = ChargeSwitch { path: "/sys/kernel/bypass_charge/bypass_charging", enable: "0", disable: "1", use_max: false };
-static SWITCH_AOZORA: ChargeSwitch = ChargeSwitch { path: "/sys/class/power_supply/battery/input_suspend", enable: "0", disable: "1", use_max: false };
-static SWITCH_FALLBACK: ChargeSwitch = ChargeSwitch { path: "/sys/class/power_supply/battery/constant_charge_current_max", enable: "3000000", disable: "100000", use_max: true };
-
-
+static SWITCH_CHIMERA: ChargeSwitch = ChargeSwitch {
+    path: "/sys/kernel/bypass_charge/bypass_charging",
+    enable: "0",
+    disable: "1",
+    use_max: false,
+};
+static SWITCH_AOZORA: ChargeSwitch = ChargeSwitch {
+    path: "/sys/class/power_supply/battery/input_suspend",
+    enable: "0",
+    disable: "1",
+    use_max: false,
+};
+static SWITCH_FALLBACK: ChargeSwitch = ChargeSwitch {
+    path: "/sys/class/power_supply/battery/constant_charge_current_max",
+    enable: "3000000",
+    disable: "100000",
+    use_max: true,
+};
 
 fn read_sysfs_backup(path_str: &str) -> Option<String> {
     if let Ok(content) = fs::read_to_string(crate::config::AUTD_SYSFS_BACKUP_PATH) {
@@ -73,7 +85,10 @@ fn get_safe_fallback(path: &PathBuf, default_enable: &str) -> String {
         }
     }
 
-    let max_path = path.with_file_name(format!("{}_max", path.file_name().unwrap_or_default().to_string_lossy()));
+    let max_path = path.with_file_name(format!(
+        "{}_max",
+        path.file_name().unwrap_or_default().to_string_lossy()
+    ));
     if max_path.exists() {
         if let Ok(val) = fs::read_to_string(&max_path) {
             if is_valid_max(&val) {
@@ -85,7 +100,7 @@ fn get_safe_fallback(path: &PathBuf, default_enable: &str) -> String {
     let alternative_paths = [
         "/sys/class/power_supply/battery/constant_charge_current_max",
         "/sys/class/power_supply/main/current_max",
-        "/sys/class/power_supply/usb/current_max"
+        "/sys/class/power_supply/usb/current_max",
     ];
     for alt in alternative_paths.iter() {
         if let Ok(val) = fs::read_to_string(alt) {
@@ -105,14 +120,14 @@ pub fn get_active_switches() -> Vec<&'static ChargeSwitch> {
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).to_lowercase())
         .unwrap_or_default();
-    
+
     let is_aozora = proc_version.contains("aozora-v9") || proc_version.contains("aozora-v10");
     let is_chimera = proc_version.contains("chimera");
-    
+
     let path_chimera = PathBuf::from(SWITCH_CHIMERA.path);
     let path_aozora = PathBuf::from(SWITCH_AOZORA.path);
     let path_fallback = PathBuf::from(SWITCH_FALLBACK.path);
-    
+
     if is_aozora {
         if path_aozora.exists() {
             active.push(&SWITCH_AOZORA);
@@ -130,11 +145,9 @@ pub fn get_active_switches() -> Vec<&'static ChargeSwitch> {
             active.push(&SWITCH_FALLBACK);
         }
     }
-    
+
     active
 }
-
-
 
 fn write_sysfs(path: &PathBuf, val: &str) {
     if let Ok(current_val) = fs::read_to_string(path) {
@@ -148,7 +161,7 @@ fn write_sysfs(path: &PathBuf, val: &str) {
         perms.set_mode(0o644);
         let _ = fs::set_permissions(path, perms);
     }
-    
+
     let _ = std::process::Command::new("sh")
         .arg("-c")
         .arg(format!("echo '{}' > {}", val, path.display()))
@@ -169,7 +182,7 @@ pub fn init_backup_once() {
         let fallback = get_safe_fallback(&path, sw.enable);
         out.push_str(&format!("{}|{}\n", sw.path, fallback));
     }
-    
+
     if !out.is_empty() {
         let _ = fs::write(crate::config::AUTD_SYSFS_BACKUP_PATH, out);
     }
@@ -186,7 +199,7 @@ pub fn enable_idle_charging() {
 
     for sw in &active_switches {
         let path = PathBuf::from(sw.path);
-        
+
         if is_first_time {
             let mut original_val = String::new();
             if sw.use_max {
@@ -199,10 +212,10 @@ pub fn enable_idle_charging() {
                     original_val = sw.enable.to_string();
                 }
             }
-            
+
             originals.push((sw.path.to_string(), original_val));
         }
-        
+
         write_sysfs(&path, sw.disable);
     }
 
@@ -220,7 +233,7 @@ pub fn disable_idle_charging() {
     if !IS_IDLE_CHARGING_ACTIVE.load(Ordering::Relaxed) {
         return;
     }
-    
+
     if let Ok(mut store) = ORIGINAL_CURRENTS.lock() {
         if let Some(originals) = store.take() {
             for (path_str, val) in originals {
@@ -239,22 +252,22 @@ pub fn disable_idle_charging() {
             }
         }
     }
-    
+
     IS_IDLE_CHARGING_ACTIVE.store(false, Ordering::Relaxed);
 }
 
-
-
 pub fn reset_charging_states() {
     IS_IDLE_CHARGING_ACTIVE.store(false, Ordering::Relaxed);
-    if let Ok(mut store) = ORIGINAL_CURRENTS.lock() { *store = None; }
+    if let Ok(mut store) = ORIGINAL_CURRENTS.lock() {
+        *store = None;
+    }
 }
 
 pub fn get_battery_level() -> i32 {
     if let Ok(bytes) = fs::read("/sys/class/power_supply/battery/capacity") {
         let mut val = 0;
         let mut has_digit = false;
-        
+
         for &b in bytes.iter() {
             if b.is_ascii_digit() {
                 val = val * 10 + (b - b'0') as i32;
@@ -263,7 +276,7 @@ pub fn get_battery_level() -> i32 {
                 break;
             }
         }
-        
+
         if has_digit {
             return val.clamp(0, 100);
         }
@@ -276,7 +289,8 @@ pub fn is_android_powersave() -> bool {
         return bytes.first() == Some(&b'1');
     }
     false
-}use regex::Regex;
+}
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 
@@ -316,7 +330,7 @@ pub struct AdvancedBatteryStats {
     pub total_full_wakelock_time_ms: u64,
     #[serde(rename = "screen_on_duration_ms")]
     pub screen_on_duration_ms: u64,
-    
+
     #[serde(rename = "deep_sleep_ms")]
     pub deep_sleep_ms: u64,
     #[serde(rename = "awake_screen_off_ms")]
@@ -329,12 +343,12 @@ pub struct AdvancedBatteryStats {
 
 fn parse_time_to_ms(time_str: &str) -> u64 {
     let mut ms = 0;
-    
+
     let re_h = Regex::new(r"(\d+)h").unwrap();
     let re_m = Regex::new(r"(\d+)m\b").unwrap();
     let re_s = Regex::new(r"(\d+)s").unwrap();
     let re_ms = Regex::new(r"(\d+)ms").unwrap();
-    
+
     if let Some(caps) = re_h.captures(time_str) {
         ms += caps[1].parse::<u64>().unwrap_or(0) * 3_600_000;
     }
@@ -347,7 +361,7 @@ fn parse_time_to_ms(time_str: &str) -> u64 {
     if let Some(caps) = re_ms.captures(time_str) {
         ms += caps[1].parse::<u64>().unwrap_or(0);
     }
-    
+
     ms
 }
 
@@ -363,35 +377,36 @@ fn parse_mah(val_str: &str) -> f64 {
 pub fn fetch_and_parse_stats() -> AdvancedBatteryStats {
     let mut stats = AdvancedBatteryStats::default();
 
-    let output = Command::new("dumpsys")
-        .arg("batterystats")
-        .output();
+    let output = Command::new("dumpsys").arg("batterystats").output();
 
     if let Ok(out) = output {
         let stdout = String::from_utf8_lossy(&out.stdout);
-        
+
         let mut in_stats_block = false;
-        
+
         for line in stdout.lines() {
             let line = line.trim();
-            
+
             if line.starts_with("Statistics since last charge:") {
                 in_stats_block = true;
                 continue;
             }
-            
+
             if in_stats_block {
-                if line.is_empty() {
+                if line.is_empty() {}
+
+                if line.starts_with("CONNECTIVITY POWER SUMMARY START")
+                    || line.starts_with("Cellular Statistics:")
+                {
+                    break;
                 }
-                
-                if line.starts_with("CONNECTIVITY POWER SUMMARY START") || line.starts_with("Cellular Statistics:") {
-                    break; 
-                }
-                
+
                 if line.starts_with("Last learned battery capacity:") {
                     stats.last_learned_capacity_mah = parse_mah(line);
                 } else if line.starts_with("Time on battery:") {
-                    let re = Regex::new(r"Time on battery:\s*(.*?)\s*\(.*?\)\s*realtime,\s*(.*?)\s*\(").unwrap();
+                    let re =
+                        Regex::new(r"Time on battery:\s*(.*?)\s*\(.*?\)\s*realtime,\s*(.*?)\s*\(")
+                            .unwrap();
                     if let Some(caps) = re.captures(line) {
                         stats.time_on_battery_realtime_ms = parse_time_to_ms(&caps[1]);
                         stats.time_on_battery_uptime_ms = parse_time_to_ms(&caps[2]);
@@ -407,7 +422,8 @@ pub fn fetch_and_parse_stats() -> AdvancedBatteryStats {
                         stats.time_on_battery_screen_doze_ms = parse_time_to_ms(&caps[1]);
                     }
                 } else if line.starts_with("Total run time:") {
-                    let re = Regex::new(r"Total run time:\s*(.*?)\s*realtime,\s*(.*?)\s*uptime").unwrap();
+                    let re = Regex::new(r"Total run time:\s*(.*?)\s*realtime,\s*(.*?)\s*uptime")
+                        .unwrap();
                     if let Some(caps) = re.captures(line) {
                         stats.total_run_time_realtime_ms = parse_time_to_ms(&caps[1]);
                         stats.total_run_time_uptime_ms = parse_time_to_ms(&caps[2]);
@@ -425,9 +441,14 @@ pub fn fetch_and_parse_stats() -> AdvancedBatteryStats {
                 } else if line.starts_with("Device deep doze discharge:") {
                     stats.device_deep_doze_discharge_mah = parse_mah(line);
                 } else if line.starts_with("Start clock time:") {
-                    stats.start_clock_time = line.replace("Start clock time:", "").trim().to_string();
+                    stats.start_clock_time =
+                        line.replace("Start clock time:", "").trim().to_string();
                 } else if line.starts_with("Connectivity changes:") {
-                    stats.connectivity_changes = line.replace("Connectivity changes:", "").trim().parse().unwrap_or(0);
+                    stats.connectivity_changes = line
+                        .replace("Connectivity changes:", "")
+                        .trim()
+                        .parse()
+                        .unwrap_or(0);
                 } else if line.starts_with("Total full wakelock time:") {
                     stats.total_full_wakelock_time_ms = parse_time_to_ms(line);
                 } else if line.starts_with("Screen on:") {
@@ -438,22 +459,32 @@ pub fn fetch_and_parse_stats() -> AdvancedBatteryStats {
                 }
             }
         }
-        
-        stats.deep_sleep_ms = stats.time_on_battery_realtime_ms.saturating_sub(stats.time_on_battery_uptime_ms);
-        stats.awake_screen_off_ms = stats.time_on_battery_uptime_ms.saturating_sub(stats.screen_on_duration_ms);
-        
-        let design_capacity = if stats.last_learned_capacity_mah > 0.0 { stats.last_learned_capacity_mah } else { 4000.0 };
-        
+
+        stats.deep_sleep_ms = stats
+            .time_on_battery_realtime_ms
+            .saturating_sub(stats.time_on_battery_uptime_ms);
+        stats.awake_screen_off_ms = stats
+            .time_on_battery_uptime_ms
+            .saturating_sub(stats.screen_on_duration_ms);
+
+        let design_capacity = if stats.last_learned_capacity_mah > 0.0 {
+            stats.last_learned_capacity_mah
+        } else {
+            4000.0
+        };
+
         let screen_on_hrs = stats.screen_on_duration_ms as f64 / 3_600_000.0;
         if screen_on_hrs > 0.0 {
-            stats.active_drain_rate_per_hr = (stats.screen_on_discharge_mah / design_capacity * 100.0) / screen_on_hrs;
+            stats.active_drain_rate_per_hr =
+                (stats.screen_on_discharge_mah / design_capacity * 100.0) / screen_on_hrs;
         }
-        
+
         let screen_off_hrs = stats.time_on_battery_screen_off_ms as f64 / 3_600_000.0;
         if screen_off_hrs > 0.0 {
-            stats.idle_drain_rate_per_hr = (stats.screen_off_discharge_mah / design_capacity * 100.0) / screen_off_hrs;
+            stats.idle_drain_rate_per_hr =
+                (stats.screen_off_discharge_mah / design_capacity * 100.0) / screen_off_hrs;
         }
     }
-    
+
     stats
 }

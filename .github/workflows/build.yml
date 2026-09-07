@@ -1,0 +1,82 @@
+name: Build CI
+
+on:
+  push:
+    branches:
+      - kotlin
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - 'assets/icon/**'
+  pull_request:
+    branches:
+      - kotlin
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app/src/main/rust/xaozora_jni
+            app/src/main/rust/xaozora_daemon
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+
+      - name: Setup Keystore (Real or Dummy for PRs)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ ! -z "$KEYSTORE_BASE64" ]; then
+            echo "Decoding production keystore..."
+            echo "$KEYSTORE_BASE64" | base64 -d > app/aozora.jks
+            {
+              echo "storeFile=app/aozora.jks"
+              echo "storePassword=$KEYSTORE_PASSWORD"
+              echo "keyAlias=$KEY_ALIAS"
+              echo "keyPassword=$KEY_PASSWORD"
+            } > key.properties
+          else
+            echo "Warning: KEYSTORE_BASE64 is missing (likely a PR build). Generating dummy keystore to test assembleRelease..."
+            keytool -genkeypair -alias dummy -keyalg RSA -keysize 2048 -validity 1 -storepass dummy123 -keypass dummy123 -dname "CN=PR Build" -storetype JKS -keystore app/dummy.jks
+            {
+              echo "storeFile=app/dummy.jks"
+              echo "storePassword=dummy123"
+              echo "keyAlias=dummy"
+              echo "keyPassword=dummy123"
+            } > key.properties
+          fi
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build APK (Test R8 & LTO)
+        run: ./gradlew assembleRelease
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Aozora-Manager-APK
+          path: app/build/outputs/apk/*/app-*.apk
+          retention-days: 90

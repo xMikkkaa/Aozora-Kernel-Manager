@@ -6,7 +6,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub fn run_logger(output_path: String) {
     println!("Aozora Battery Logger started. Logging to {}", output_path);
-    
+
     crate::config::ensure_battmon_dir();
 
     while crate::RUNNING.load(std::sync::atomic::Ordering::SeqCst) {
@@ -36,18 +36,28 @@ pub fn run_logger(output_path: String) {
             timestamp, capacity, status, charge_full, current_now
         );
 
-        if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&output_path) {
+        if let Ok(mut file) = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&output_path)
+        {
             let _ = file.write_all(log_entry.as_bytes());
         }
 
         let advanced_stats = crate::monitor::battery::fetch_and_parse_stats();
-        let advanced_json = serde_json::to_string_pretty(&advanced_stats).unwrap_or_else(|_| "{}".to_string());
-        
+        let advanced_json =
+            serde_json::to_string_pretty(&advanced_stats).unwrap_or_else(|_| "{}".to_string());
+
         let stats_path = crate::config::BATTMON_DIR.to_owned() + "/battery_stats.json";
-        if let Ok(mut file) = OpenOptions::new().create(true).write(true).truncate(true).open(&stats_path) {
+        if let Ok(mut file) = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&stats_path)
+        {
             let _ = file.write_all(advanced_json.as_bytes());
         }
-        
+
         if let Ok(metadata) = fs::metadata(&stats_path) {
             let mut perms = metadata.permissions();
             perms.set_mode(0o666);

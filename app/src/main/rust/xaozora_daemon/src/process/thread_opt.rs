@@ -29,16 +29,16 @@ pub fn init_cpuset() {
             return;
         }
     }
-    
+
     let mems_path = format!("{}/mems", crate::config::GAME_MODE_DIR);
     set_value(&mems_path, "0");
-    
+
     let cpus_path = format!("{}/cpus", crate::config::GAME_MODE_DIR);
     set_value(&cpus_path, "4-7");
-    
+
     let uclamp_boosted_path = format!("{}/uclamp.boosted", crate::config::GAME_MODE_DIR);
     set_value(&uclamp_boosted_path, "1");
-    
+
     let uclamp_min_path = format!("{}/uclamp.min", crate::config::GAME_MODE_DIR);
     set_value(&uclamp_min_path, "100");
 }
