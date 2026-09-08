@@ -181,7 +181,11 @@ pub fn run_autd() {
                 utils::cmd::apply_mode(&chosen_mode);
 
                 msg_buffer.clear();
-                let _ = write!(msg_buffer, "Game: {} (Mode: {})", current_game, chosen_mode);
+                let _ = write!(
+                    msg_buffer,
+                    "Profile: {} (Mode: {})",
+                    current_game, chosen_mode
+                );
                 utils::cmd::send_toast(&msg_buffer);
 
                 last_mode.clear();
