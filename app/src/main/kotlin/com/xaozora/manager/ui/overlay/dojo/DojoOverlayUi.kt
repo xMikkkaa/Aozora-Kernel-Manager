@@ -22,7 +22,9 @@
 package com.xaozora.manager.ui.overlay.dojo
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -30,6 +32,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.RocketLaunch
@@ -42,6 +45,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -74,11 +78,16 @@ fun DojoOverlay(
     onKehaiChange: (Boolean) -> Unit,
     onClose: () -> Unit,
     onDrag: (Float, Float) -> Unit = { _, _ -> },
+    atRightEdge: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier) {
         if (!kaikin) {
-            DojoEdgeTab(onTap = { onKaikinChange(true) }, onDrag = onDrag)
+            DojoEdgeTab(
+                onTap = { onKaikinChange(true) },
+                onDrag = onDrag,
+                atRightEdge = atRightEdge
+            )
         } else {
             DojoToolbar(
                 shiai = shiai,
@@ -94,33 +103,31 @@ fun DojoOverlay(
 private fun DojoEdgeTab(
     onTap: () -> Unit,
     onDrag: (Float, Float) -> Unit,
+    atRightEdge: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val colorScheme = MaterialTheme.colorScheme
-    Surface(
-        onClick = onTap,
-        modifier = modifier.pointerInput(Unit) {
-            detectDragGestures { change, dragAmount ->
-                change.consume()
-                onDrag(dragAmount.x, dragAmount.y)
+    Box(
+        modifier = modifier
+            .size(width = 48.dp, height = 72.dp)
+            .pointerInput(Unit) {
+                detectDragGestures { change, dragAmount ->
+                    change.consume()
+                    onDrag(dragAmount.x, dragAmount.y)
+                }
             }
-        },
-        shape = RoundedCornerShape(12.dp),
-        color = colorScheme.surfaceContainerHighest.copy(alpha = 0.78f),
-        contentColor = colorScheme.onSurfaceVariant,
-        tonalElevation = 3.dp,
-        shadowElevation = 6.dp
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onTap
+            ),
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier.size(width = 36.dp, height = 76.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.ChevronRight,
-                contentDescription = "Buka panel dojo",
-                modifier = Modifier.size(22.dp)
-            )
-        }
+        Icon(
+            imageVector = if (atRightEdge) Icons.Rounded.ChevronLeft else Icons.Rounded.ChevronRight,
+            contentDescription = "Buka panel dojo",
+            modifier = Modifier.size(28.dp),
+            tint = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 
@@ -137,8 +144,8 @@ private fun DojoToolbar(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(24.dp),
-        color = colorScheme.inverseSurface.copy(alpha = 0.94f),
-        contentColor = colorScheme.inverseOnSurface,
+        color = colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+        contentColor = colorScheme.onSurface,
         tonalElevation = 3.dp,
         shadowElevation = 6.dp
     ) {
@@ -149,18 +156,20 @@ private fun DojoToolbar(
             IconButton(onClick = onClose) {
                 Icon(
                     imageVector = Icons.Rounded.Close,
-                    contentDescription = "Ciutkan panel"
+                    contentDescription = "Ciutkan panel",
+                    tint = colorScheme.onSurface
                 )
             }
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 4.dp),
-                color = colorScheme.inverseOnSurface.copy(alpha = 0.16f)
+                color = colorScheme.outlineVariant.copy(alpha = 0.6f)
             )
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 IconButton(onClick = { onKehaiChange(!kehai) }) {
                     Icon(
                         imageVector = asobiIcon(asobi),
-                        contentDescription = asobiLabel(asobi)
+                        contentDescription = asobiLabel(asobi),
+                        tint = colorScheme.onSurface
                     )
                 }
                 Text(
@@ -186,7 +195,7 @@ private fun DojoToolbar(
                     Text(
                         text = if (shiai == null) "Menunggu shiai" else "pid ${shiai.pid}",
                         style = MaterialTheme.typography.labelSmall.copy(
-                            color = colorScheme.inverseOnSurface.copy(alpha = 0.72f)
+                            color = colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                         ),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -194,7 +203,7 @@ private fun DojoToolbar(
                     Text(
                         text = "shiai berjalan dengan profil ${asobiLabel(asobi)}",
                         style = MaterialTheme.typography.bodySmall.copy(
-                            color = colorScheme.inverseOnSurface.copy(alpha = 0.72f)
+                            color = colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                         )
                     )
                 }

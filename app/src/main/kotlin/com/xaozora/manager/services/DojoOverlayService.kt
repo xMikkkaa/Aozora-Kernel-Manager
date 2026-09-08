@@ -54,6 +54,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.xaozora.manager.MainActivity
 import com.xaozora.manager.core.utils.DojoOverlayState
 import com.xaozora.manager.ui.overlay.dojo.DojoOverlay
+import com.xaozora.manager.ui.theme.AozoraKernelManagerTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -78,6 +79,7 @@ class DojoOverlayService : Service() {
     private var composeView: ComposeView? = null
     private var viewAttached = false
     private var overlayOwner: OverlayOwner? = null
+    private var atRightEdgeState = mutableStateOf(false)
 
     private class OverlayOwner : LifecycleOwner, SavedStateRegistryOwner {
         private val registry = LifecycleRegistry(this)
@@ -187,24 +189,31 @@ class DojoOverlayService : Service() {
         view.setViewTreeLifecycleOwner(owner)
         view.setViewTreeSavedStateRegistryOwner(owner)
         view.setContent {
-            val shiai by DojoOverlayState.shiai.collectAsState()
-            var kaikin by remember { mutableStateOf(false) }
-            var kehai by remember { mutableStateOf(false) }
-            LaunchedEffect(shiai) {
-                if (shiai == null) {
-                    kaikin = false
-                    kehai = false
+            AozoraKernelManagerTheme {
+                val shiai by DojoOverlayState.shiai.collectAsState()
+                var kaikin by remember { mutableStateOf(false) }
+                var kehai by remember { mutableStateOf(false) }
+                val atRightEdge by atRightEdgeState
+                LaunchedEffect(shiai) {
+                    if (shiai == null) {
+                        kaikin = false
+                        kehai = false
+                    }
                 }
+                DojoOverlay(
+                    shiai = shiai,
+                    kaikin = kaikin,
+                    onKaikinChange = { kaikin = it },
+                    kehai = kehai,
+                    onKehaiChange = { kehai = it },
+                    onClose = {
+                        kaikin = false
+                        snapEdgeTabToEdge()
+                    },
+                    onDrag = { dx, dy -> moveOverlay(dx, dy) },
+                    atRightEdge = atRightEdge
+                )
             }
-            DojoOverlay(
-                shiai = shiai,
-                kaikin = kaikin,
-                onKaikinChange = { kaikin = it },
-                kehai = kehai,
-                onKehaiChange = { kehai = it },
-                onClose = { kaikin = false },
-                onDrag = { dx, dy -> moveOverlay(dx, dy) }
-            )
         }
         composeView = view
     }
@@ -221,9 +230,55 @@ class DojoOverlayService : Service() {
         }
     }
 
-    private fun moveOverlay(dx: Float, dy: Float) {        val params = overlayParams ?: return
+    private fun moveOverlay(dx: Float, dy: Float) {
+        val params = overlayParams ?: return
         params.x += dx.toInt()
         params.y += dy.toInt()
+        val width = displayWidth()
+        if (width > 0) {
+            atRightEdgeState.value = params.x >= width / 2
+        }
+        if (!viewAttached) return
+        try {
+            windowManager?.updateViewLayout(composeView, params)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun displayWidth(): Int {
+        val wm = windowManager ?: return 0
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                wm.currentWindowMetrics.bounds.width()
+            } else {
+                @Suppress("DEPRECATION")
+                val display = wm.defaultDisplay
+                val size = android.graphics.Point()
+                @Suppress("DEPRECATION")
+                display.getSize(size)
+                size.x
+            }
+        } catch (_: Exception) {
+            0
+        }
+    }
+
+    private fun snapEdgeTabToEdge() {
+        val params = overlayParams ?: return
+        val width = displayWidth()
+        if (width <= 0) {
+            params.x = 0
+            atRightEdgeState.value = false
+            return
+        }
+        if (params.x < width / 2) {
+            params.x = 0
+            atRightEdgeState.value = false
+        } else {
+            val tabWidthPx = (48 * resources.displayMetrics.density).toInt()
+            params.x = (width - tabWidthPx).coerceAtLeast(0)
+            atRightEdgeState.value = true
+        }
         if (!viewAttached) return
         try {
             windowManager?.updateViewLayout(composeView, params)
