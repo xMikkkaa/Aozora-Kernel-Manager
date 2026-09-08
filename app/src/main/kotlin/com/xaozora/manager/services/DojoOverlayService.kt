@@ -175,6 +175,10 @@ class DojoOverlayService : Service() {
             gravity = Gravity.TOP or Gravity.START
             x = 0
             y = 200
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            }
         }
     }
 
@@ -275,7 +279,14 @@ class DojoOverlayService : Service() {
             params.x = 0
             atRightEdgeState.value = false
         } else {
-            val tabWidthPx = (48 * resources.displayMetrics.density).toInt()
+            val density = resources.displayMetrics.density
+            val estimatedTabPx = (48 * density).toInt()
+            val actualPx = if (viewAttached) composeView?.width ?: 0 else 0
+            val tabWidthPx = if (actualPx > 0 && actualPx <= (64 * density).toInt()) {
+                actualPx
+            } else {
+                estimatedTabPx
+            }
             params.x = (width - tabWidthPx).coerceAtLeast(0)
             atRightEdgeState.value = true
         }

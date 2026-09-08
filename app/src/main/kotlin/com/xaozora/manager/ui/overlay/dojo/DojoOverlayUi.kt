@@ -27,8 +27,10 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -93,7 +95,8 @@ fun DojoOverlay(
                 shiai = shiai,
                 kehai = kehai,
                 onKehaiChange = onKehaiChange,
-                onClose = onClose
+                onClose = onClose,
+                atRightEdge = atRightEdge
             )
         }
     }
@@ -137,13 +140,54 @@ private fun DojoToolbar(
     kehai: Boolean,
     onKehaiChange: (Boolean) -> Unit,
     onClose: () -> Unit,
+    atRightEdge: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.Top
+    ) {
+        if (atRightEdge) {
+            DojoInfoSheet(
+                shiai = shiai,
+                kehai = kehai,
+                modifier = Modifier.padding(end = 8.dp)
+            )
+            DojoRail(
+                shiai = shiai,
+                kehai = kehai,
+                onKehaiChange = onKehaiChange,
+                onClose = onClose
+            )
+        } else {
+            DojoRail(
+                shiai = shiai,
+                kehai = kehai,
+                onKehaiChange = onKehaiChange,
+                onClose = onClose
+            )
+            DojoInfoSheet(
+                shiai = shiai,
+                kehai = kehai,
+                modifier = Modifier.padding(start = 8.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun DojoRail(
+    shiai: ShiaiSession?,
+    kehai: Boolean,
+    onKehaiChange: (Boolean) -> Unit,
+    onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val asobi = shiai?.asobi ?: AsobiMode.UNKNOWN
     Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(24.dp),
+        modifier = modifier.width(80.dp),
+        shape = RoundedCornerShape(20.dp),
         color = colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
         contentColor = colorScheme.onSurface,
         tonalElevation = 3.dp,
@@ -179,34 +223,55 @@ private fun DojoToolbar(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            AnimatedVisibility(visible = kehai) {
-                Column(
-                    modifier = Modifier
-                        .widthIn(max = 200.dp)
-                        .padding(top = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = shiai?.shiai ?: "Dojo",
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+        }
+    }
+}
+
+@Composable
+private fun DojoInfoSheet(
+    shiai: ShiaiSession?,
+    kehai: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    val asobi = shiai?.asobi ?: AsobiMode.UNKNOWN
+    AnimatedVisibility(
+        visible = kehai,
+        modifier = modifier
+    ) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+            contentColor = colorScheme.onSurface,
+            tonalElevation = 3.dp,
+            shadowElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .widthIn(min = 180.dp, max = 240.dp)
+                    .padding(12.dp),
+                horizontalAlignment = Alignment.Start
+            ) {
+                Text(
+                    text = shiai?.shiai ?: "Dojo",
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = if (shiai == null) "Menunggu shiai" else "pid ${shiai.pid}",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        color = colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "shiai berjalan dengan profil ${asobiLabel(asobi)}",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        color = colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                     )
-                    Text(
-                        text = if (shiai == null) "Menunggu shiai" else "pid ${shiai.pid}",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            color = colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                        ),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "shiai berjalan dengan profil ${asobiLabel(asobi)}",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                        )
-                    )
-                }
+                )
             }
         }
     }
