@@ -105,6 +105,7 @@ class DojoOverlayService : Service() {
         if (!prefs.getBoolean("dojo_kaikin", false)) return
         if (!Settings.canDrawOverlays(this)) return
         prepareOverlay()
+        recoverKehaiFromFile()
         serviceScope.launch {
             DojoOverlayState.shiai.collect { sesi ->
                 if (sesi == null) {
@@ -126,6 +127,8 @@ class DojoOverlayService : Service() {
                 if (!kehaiJson.isNullOrBlank()) {
                     val kehai = DojoOverlayState.parseKehai(kehaiJson)
                     if (kehai != null) DojoOverlayState.publishKehai(kehai)
+                } else {
+                    recoverKehaiFromFile()
                 }
                 if (DojoOverlayState.shiai.value == null) {
                     hideOverlay()
@@ -206,8 +209,19 @@ class DojoOverlayService : Service() {
         composeView = view
     }
 
-    private fun moveOverlay(dx: Float, dy: Float) {
-        val params = overlayParams ?: return
+    private fun recoverKehaiFromFile() {
+        try {
+            val file = java.io.File(filesDir, "autd/dojo_kehai")
+            if (!file.exists()) return
+            val kehaiJson = file.readText().trim()
+            if (kehaiJson.isBlank()) return
+            val kehai = DojoOverlayState.parseKehai(kehaiJson) ?: return
+            DojoOverlayState.publishKehai(kehai)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun moveOverlay(dx: Float, dy: Float) {        val params = overlayParams ?: return
         params.x += dx.toInt()
         params.y += dy.toInt()
         if (!viewAttached) return
