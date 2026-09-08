@@ -44,10 +44,9 @@ pub fn get_configured_apps(app_list_path: &str) -> Vec<ConfiguredApp> {
                 return None;
             };
 
-            let package_name = if let Some(stripped) = trimmed.strip_suffix(&format!("_{}", mode)) {
+            let package_name = {
+                let stripped = trimmed.strip_suffix(&format!("_{}", mode))?;
                 stripped.to_string()
-            } else {
-                return None;
             };
 
             Some(ConfiguredApp {

@@ -59,11 +59,9 @@ fn main() {
             "--enable-autd" => enable_autd = true,
             "--disable-autd" => disable_autd = true,
             "--reset-stats" => reset_stats = true,
-            "--battery-logger" => {
-                if i + 1 < args.len() {
-                    logger_path = Some(args[i + 1].clone());
-                    i += 1;
-                }
+            "--battery-logger" if i + 1 < args.len() => {
+                logger_path = Some(args[i + 1].clone());
+                i += 1;
             }
             _ => {}
         }
