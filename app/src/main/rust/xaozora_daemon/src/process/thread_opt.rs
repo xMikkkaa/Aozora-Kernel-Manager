@@ -24,10 +24,10 @@ fn set_value(file: &str, value: &str) {
 }
 
 pub fn init_cpuset() {
-    if !Path::new(crate::config::GAME_MODE_DIR).exists() {
-        if fs::create_dir_all(crate::config::GAME_MODE_DIR).is_err() {
-            return;
-        }
+    if !Path::new(crate::config::GAME_MODE_DIR).exists()
+        && fs::create_dir_all(crate::config::GAME_MODE_DIR).is_err()
+    {
+        return;
     }
 
     let mems_path = format!("{}/mems", crate::config::GAME_MODE_DIR);

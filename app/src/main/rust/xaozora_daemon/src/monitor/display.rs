@@ -22,15 +22,15 @@ use std::sync::Mutex;
 static LAST_AWAKE_METHOD: Mutex<String> = Mutex::new(String::new());
 
 pub fn log_active_method(method: &str) {
-    if let Ok(mut last_method) = LAST_AWAKE_METHOD.lock() {
-        if last_method.as_str() != method {
-            if let Ok(mut file) = File::create(crate::config::AUTD_AWAKE_DEBUG_LOG) {
-                let _ = writeln!(file, "Active Method: {}", method);
-            }
-
-            last_method.clear();
-            last_method.push_str(method);
+    if let Ok(mut last_method) = LAST_AWAKE_METHOD.lock()
+        && last_method.as_str() != method
+    {
+        if let Ok(mut file) = File::create(crate::config::AUTD_AWAKE_DEBUG_LOG) {
+            let _ = writeln!(file, "Active Method: {}", method);
         }
+
+        last_method.clear();
+        last_method.push_str(method);
     }
 }
 
@@ -65,17 +65,18 @@ pub fn is_awake() -> bool {
 
     if let Ok(entries) = fs::read_dir("/sys/class/drm/") {
         for entry in entries.flatten() {
-            if let Some(name) = entry.file_name().to_str() {
-                if name.starts_with("card0-") && !name.contains("virtual") {
-                    let enabled_path = entry.path().join("enabled");
-                    if let Ok(bytes) = fs::read(enabled_path) {
-                        if bytes.starts_with(b"enabled") {
-                            log_active_method("SysFS DRM (Enabled Check)");
-                            return true;
-                        } else if bytes.starts_with(b"disabled") {
-                            log_active_method("SysFS DRM (Enabled Check)");
-                            return false;
-                        }
+            if let Some(name) = entry.file_name().to_str()
+                && name.starts_with("card0-")
+                && !name.contains("virtual")
+            {
+                let enabled_path = entry.path().join("enabled");
+                if let Ok(bytes) = fs::read(enabled_path) {
+                    if bytes.starts_with(b"enabled") {
+                        log_active_method("SysFS DRM (Enabled Check)");
+                        return true;
+                    } else if bytes.starts_with(b"disabled") {
+                        log_active_method("SysFS DRM (Enabled Check)");
+                        return false;
                     }
                 }
             }

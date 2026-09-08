@@ -52,10 +52,8 @@ pub fn setup_android_env() {
 }
 
 pub fn ensure_app_dir() {
-    if fs::metadata(AUTD_DIR).is_err() {
-        if let Err(e) = fs::create_dir_all(AUTD_DIR) {
-            eprintln!("autd: Failed to create AUTD_DIR: {}", e);
-        }
+    if let Err(e) = fs::create_dir_all(AUTD_DIR) {
+        eprintln!("autd: Failed to create AUTD_DIR: {}", e);
     }
 
     if let Ok(metadata) = fs::metadata(AUTD_DIR) {
@@ -66,11 +64,9 @@ pub fn ensure_app_dir() {
 }
 
 pub fn ensure_battmon_dir() {
-    if fs::metadata(BATTMON_DIR).is_err() {
-        if let Err(e) = fs::create_dir_all(BATTMON_DIR) {
-            eprintln!("battmon: Failed to create BATTMON_DIR: {}", e);
-            return;
-        }
+    if let Err(e) = fs::create_dir_all(BATTMON_DIR) {
+        eprintln!("battmon: Failed to create BATTMON_DIR: {}", e);
+        return;
     }
 
     if let Ok(metadata) = fs::metadata(BATTMON_DIR) {

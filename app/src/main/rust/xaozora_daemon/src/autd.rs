@@ -106,11 +106,11 @@ pub fn run_autd() {
                     let mut buf = [0u8; 128];
                     if let Ok(n) = std::io::Read::read(&mut fifo_file, &mut buf) {
                         let msg = String::from_utf8_lossy(&buf[..n]);
-                        for part in msg.split(|c| c == '|' || c == '\n') {
-                            if part.starts_with("BAT:") {
-                                bat_level = part[4..].trim().parse().unwrap_or(bat_level);
-                            } else if part.starts_with("SCR:") {
-                                is_awake_state = part[4..].trim() == "1";
+                        for part in msg.split(['|', '\n']) {
+                            if let Some(val) = part.strip_prefix("BAT:") {
+                                bat_level = val.trim().parse().unwrap_or(bat_level);
+                            } else if let Some(val) = part.strip_prefix("SCR:") {
+                                is_awake_state = val.trim() == "1";
                             }
                         }
                     }
@@ -288,11 +288,11 @@ pub fn run_autd() {
             let mut buf = [0u8; 128];
             if let Ok(n) = std::io::Read::read(&mut fifo_file, &mut buf) {
                 let msg = String::from_utf8_lossy(&buf[..n]);
-                for part in msg.split(|c| c == '|' || c == '\n') {
-                    if part.starts_with("BAT:") {
-                        bat_level = part[4..].trim().parse().unwrap_or(bat_level);
-                    } else if part.starts_with("SCR:") {
-                        is_awake_state = part[4..].trim() == "1";
+                for part in msg.split(['|', '\n']) {
+                    if let Some(val) = part.strip_prefix("BAT:") {
+                        bat_level = val.trim().parse().unwrap_or(bat_level);
+                    } else if let Some(val) = part.strip_prefix("SCR:") {
+                        is_awake_state = val.trim() == "1";
                     }
                 }
             }

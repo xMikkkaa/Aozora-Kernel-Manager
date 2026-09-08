@@ -16,7 +16,7 @@
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -53,10 +53,10 @@ fn read_sysfs_backup(path_str: &str) -> Option<String> {
     if let Ok(content) = fs::read_to_string(crate::config::AUTD_SYSFS_BACKUP_PATH) {
         for line in content.lines() {
             let mut parts = line.split('|');
-            if let (Some(p), Some(v)) = (parts.next(), parts.next()) {
-                if p == path_str {
-                    return Some(v.to_string());
-                }
+            if let (Some(p), Some(v)) = (parts.next(), parts.next())
+                && p == path_str
+            {
+                return Some(v.to_string());
             }
         }
     }
@@ -78,23 +78,22 @@ fn is_valid_max(val_str: &str) -> bool {
     true
 }
 
-fn get_safe_fallback(path: &PathBuf, default_enable: &str) -> String {
-    if let Some(backup) = read_sysfs_backup(&path.to_string_lossy()) {
-        if is_valid_max(&backup) {
-            return backup;
-        }
+fn get_safe_fallback(path: &Path, default_enable: &str) -> String {
+    if let Some(backup) = read_sysfs_backup(&path.to_string_lossy())
+        && is_valid_max(&backup)
+    {
+        return backup;
     }
 
     let max_path = path.with_file_name(format!(
         "{}_max",
         path.file_name().unwrap_or_default().to_string_lossy()
     ));
-    if max_path.exists() {
-        if let Ok(val) = fs::read_to_string(&max_path) {
-            if is_valid_max(&val) {
-                return val.trim().to_string();
-            }
-        }
+    if max_path.exists()
+        && let Ok(val) = fs::read_to_string(&max_path)
+        && is_valid_max(&val)
+    {
+        return val.trim().to_string();
     }
 
     let alternative_paths = [
@@ -103,10 +102,10 @@ fn get_safe_fallback(path: &PathBuf, default_enable: &str) -> String {
         "/sys/class/power_supply/usb/current_max",
     ];
     for alt in alternative_paths.iter() {
-        if let Ok(val) = fs::read_to_string(alt) {
-            if is_valid_max(&val) {
-                return val.trim().to_string();
-            }
+        if let Ok(val) = fs::read_to_string(alt)
+            && is_valid_max(&val)
+        {
+            return val.trim().to_string();
         }
     }
 
@@ -140,20 +139,18 @@ pub fn get_active_switches() -> Vec<&'static ChargeSwitch> {
         } else if path_fallback.exists() {
             active.push(&SWITCH_FALLBACK);
         }
-    } else {
-        if path_fallback.exists() {
-            active.push(&SWITCH_FALLBACK);
-        }
+    } else if path_fallback.exists() {
+        active.push(&SWITCH_FALLBACK);
     }
 
     active
 }
 
 fn write_sysfs(path: &PathBuf, val: &str) {
-    if let Ok(current_val) = fs::read_to_string(path) {
-        if current_val.trim() == val.trim() {
-            return;
-        }
+    if let Ok(current_val) = fs::read_to_string(path)
+        && current_val.trim() == val.trim()
+    {
+        return;
     }
 
     if let Ok(metadata) = fs::metadata(path) {
@@ -169,10 +166,10 @@ fn write_sysfs(path: &PathBuf, val: &str) {
 }
 
 pub fn init_backup_once() {
-    if let Ok(content) = fs::read_to_string(crate::config::AUTD_SYSFS_BACKUP_PATH) {
-        if content.lines().count() > 0 {
-            return;
-        }
+    if let Ok(content) = fs::read_to_string(crate::config::AUTD_SYSFS_BACKUP_PATH)
+        && content.lines().count() > 0
+    {
+        return;
     }
 
     let mut out = String::new();
@@ -220,10 +217,11 @@ pub fn enable_idle_charging() {
     }
 
     if is_first_time {
-        if let Ok(mut store) = ORIGINAL_CURRENTS.lock() {
-            if store.is_none() && !originals.is_empty() {
-                *store = Some(originals);
-            }
+        if let Ok(mut store) = ORIGINAL_CURRENTS.lock()
+            && store.is_none()
+            && !originals.is_empty()
+        {
+            *store = Some(originals);
         }
         IS_IDLE_CHARGING_ACTIVE.store(true, Ordering::Relaxed);
     }
@@ -384,6 +382,16 @@ pub fn fetch_and_parse_stats() -> AdvancedBatteryStats {
 
         let mut in_stats_block = false;
 
+        let re_time_on_battery =
+            Regex::new(r"Time on battery:\s*(.*?)\s*\(.*?\)\s*realtime,\s*(.*?)\s*\(").unwrap();
+        let re_time_on_battery_screen_off =
+            Regex::new(r"Time on battery screen off:\s*(.*?)\s*\(").unwrap();
+        let re_time_on_battery_screen_doze =
+            Regex::new(r"Time on battery screen doze:\s*(.*?)\s*\(").unwrap();
+        let re_total_run_time =
+            Regex::new(r"Total run time:\s*(.*?)\s*realtime,\s*(.*?)\s*uptime").unwrap();
+        let re_screen_on = Regex::new(r"Screen on:\s*(.*?)\s*\(").unwrap();
+
         for line in stdout.lines() {
             let line = line.trim();
 
@@ -393,8 +401,6 @@ pub fn fetch_and_parse_stats() -> AdvancedBatteryStats {
             }
 
             if in_stats_block {
-                if line.is_empty() {}
-
                 if line.starts_with("CONNECTIVITY POWER SUMMARY START")
                     || line.starts_with("Cellular Statistics:")
                 {
@@ -404,27 +410,20 @@ pub fn fetch_and_parse_stats() -> AdvancedBatteryStats {
                 if line.starts_with("Last learned battery capacity:") {
                     stats.last_learned_capacity_mah = parse_mah(line);
                 } else if line.starts_with("Time on battery:") {
-                    let re =
-                        Regex::new(r"Time on battery:\s*(.*?)\s*\(.*?\)\s*realtime,\s*(.*?)\s*\(")
-                            .unwrap();
-                    if let Some(caps) = re.captures(line) {
+                    if let Some(caps) = re_time_on_battery.captures(line) {
                         stats.time_on_battery_realtime_ms = parse_time_to_ms(&caps[1]);
                         stats.time_on_battery_uptime_ms = parse_time_to_ms(&caps[2]);
                     }
                 } else if line.starts_with("Time on battery screen off:") {
-                    let re = Regex::new(r"Time on battery screen off:\s*(.*?)\s*\(").unwrap();
-                    if let Some(caps) = re.captures(line) {
+                    if let Some(caps) = re_time_on_battery_screen_off.captures(line) {
                         stats.time_on_battery_screen_off_ms = parse_time_to_ms(&caps[1]);
                     }
                 } else if line.starts_with("Time on battery screen doze:") {
-                    let re = Regex::new(r"Time on battery screen doze:\s*(.*?)\s*\(").unwrap();
-                    if let Some(caps) = re.captures(line) {
+                    if let Some(caps) = re_time_on_battery_screen_doze.captures(line) {
                         stats.time_on_battery_screen_doze_ms = parse_time_to_ms(&caps[1]);
                     }
                 } else if line.starts_with("Total run time:") {
-                    let re = Regex::new(r"Total run time:\s*(.*?)\s*realtime,\s*(.*?)\s*uptime")
-                        .unwrap();
-                    if let Some(caps) = re.captures(line) {
+                    if let Some(caps) = re_total_run_time.captures(line) {
                         stats.total_run_time_realtime_ms = parse_time_to_ms(&caps[1]);
                         stats.total_run_time_uptime_ms = parse_time_to_ms(&caps[2]);
                     }
@@ -451,11 +450,10 @@ pub fn fetch_and_parse_stats() -> AdvancedBatteryStats {
                         .unwrap_or(0);
                 } else if line.starts_with("Total full wakelock time:") {
                     stats.total_full_wakelock_time_ms = parse_time_to_ms(line);
-                } else if line.starts_with("Screen on:") {
-                    let re = Regex::new(r"Screen on:\s*(.*?)\s*\(").unwrap();
-                    if let Some(caps) = re.captures(line) {
-                        stats.screen_on_duration_ms = parse_time_to_ms(&caps[1]);
-                    }
+                } else if line.starts_with("Screen on:")
+                    && let Some(caps) = re_screen_on.captures(line)
+                {
+                    stats.screen_on_duration_ms = parse_time_to_ms(&caps[1]);
                 }
             }
         }

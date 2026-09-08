@@ -48,10 +48,11 @@ pub fn load_filelist_if_changed() {
         Err(_) => return,
     };
 
-    if let Some(cached_time) = cache.0 {
-        if cached_time == mtime && !cache.1.is_empty() {
-            return;
-        }
+    if let Some(cached_time) = cache.0
+        && cached_time == mtime
+        && !cache.1.is_empty()
+    {
+        return;
     }
 
     let content = match fs::read_to_string(crate::config::FILELIST_PATH) {
@@ -129,36 +130,35 @@ pub fn find_game_process() -> Option<(String, String, i32)> {
                     let _ = write!(cursor, "/proc/{}/cmdline", pid);
                     let len = cursor.position() as usize;
 
-                    if let Ok(path_str) = std::str::from_utf8(&path_buf[..len]) {
-                        if let Ok(cmdline_bytes) = fs::read(path_str) {
-                            if cmdline_bytes.is_empty() || cmdline_bytes[0] == 0 {
-                                continue;
-                            }
+                    if let Ok(path_str) = std::str::from_utf8(&path_buf[..len])
+                        && let Ok(cmdline_bytes) = fs::read(path_str)
+                    {
+                        if cmdline_bytes.is_empty() || cmdline_bytes[0] == 0 {
+                            continue;
+                        }
 
-                            let null_pos = cmdline_bytes
-                                .iter()
-                                .position(|&x| x == 0)
-                                .unwrap_or(cmdline_bytes.len());
-                            let mut name_slice = &cmdline_bytes[..null_pos];
+                        let null_pos = cmdline_bytes
+                            .iter()
+                            .position(|&x| x == 0)
+                            .unwrap_or(cmdline_bytes.len());
+                        let mut name_slice = &cmdline_bytes[..null_pos];
 
-                            if let Some(slash_pos) = name_slice.iter().rposition(|&x| x == b'/') {
-                                if slash_pos + 1 < name_slice.len() {
-                                    name_slice = &name_slice[slash_pos + 1..];
-                                }
-                            }
+                        if let Some(slash_pos) = name_slice.iter().rposition(|&x| x == b'/')
+                            && slash_pos + 1 < name_slice.len()
+                        {
+                            name_slice = &name_slice[slash_pos + 1..];
+                        }
 
-                            for entry in &cache.1 {
-                                let base_len = entry.base.len();
-                                if name_slice.starts_with(&entry.base) {
-                                    if name_slice.len() == base_len || name_slice[base_len] == b':'
-                                    {
-                                        return Some((
-                                            String::from_utf8_lossy(&entry.base).into_owned(),
-                                            entry.chosen_mode.clone(),
-                                            pid,
-                                        ));
-                                    }
-                                }
+                        for entry in &cache.1 {
+                            let base_len = entry.base.len();
+                            if name_slice.starts_with(&entry.base)
+                                && (name_slice.len() == base_len || name_slice[base_len] == b':')
+                            {
+                                return Some((
+                                    String::from_utf8_lossy(&entry.base).into_owned(),
+                                    entry.chosen_mode.clone(),
+                                    pid,
+                                ));
                             }
                         }
                     }
