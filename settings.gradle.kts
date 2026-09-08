@@ -23,4 +23,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Aozora Kernel Manager"
-include(":app")
+include(":manager:app")

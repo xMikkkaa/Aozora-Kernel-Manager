@@ -27,8 +27,8 @@ android {
             keyPassword = keystoreProperties["keyPassword"] as String? ?: ""
             val storeFilePath = keystoreProperties["storeFile"] as String?
             if (storeFilePath != null && storeFilePath.isNotEmpty()) {
-                // Mendukung resolve jika ditulis "app/aozora.jks" (dari CI) maupun "aozora.jks" (lokal)
-                storeFile = if (storeFilePath.startsWith("app/")) {
+                // Mendukung resolve jika ditulis "manager/app/aozora.jks" (dari CI) maupun "aozora.jks" (lokal)
+                storeFile = if (storeFilePath.startsWith("manager/app/")) {
                     rootProject.file(storeFilePath)
                 } else {
                     file(storeFilePath)
@@ -80,9 +80,10 @@ android {
 }
 
 
-val rustProjectDir = file("src/main/rust/xaozora_daemon")
-val rustOutputBinary = file("src/main/rust/xaozora_daemon/target/aarch64-linux-android/release/xaozora_daemon")
+val rustProjectDir = rootProject.file("rust/xaozora_daemon")
+val rustOutputBinary = rootProject.file("rust/xaozora_daemon/target/aarch64-linux-android/release/xaozora_daemon")
 val assetsOutputDir = file("src/main/assets")
+val jniLibsDir = file("src/main/libs")
 
 val ndkDir: String by lazy {
     val envNdk = System.getenv("ANDROID_NDK_HOME")
@@ -130,14 +131,14 @@ tasks.register<Exec>("buildRustJni") {
     group = "rust"
     description = "Compiles the Rust xaozora_jni native library for Android targets"
 
-    workingDir = file("src/main/rust/xaozora_jni")
+    workingDir = rootProject.file("rust/xaozora_jni")
     environment("ANDROID_NDK_HOME", ndkDir)
 
-    commandLine("cargo", "ndk", "-t", "arm64-v8a", "-o", "../../libs", "build", "--release")
+    commandLine("cargo", "ndk", "-t", "arm64-v8a", "-o", jniLibsDir.absolutePath, "build", "--release")
 
-    inputs.dir(file("src/main/rust/xaozora_jni/src"))
-    inputs.file(file("src/main/rust/xaozora_jni/Cargo.toml"))
-    outputs.dir(file("src/main/libs"))
+    inputs.dir(rootProject.file("rust/xaozora_jni/src"))
+    inputs.file(rootProject.file("rust/xaozora_jni/Cargo.toml"))
+    outputs.dir(jniLibsDir)
 }
 
 tasks.register<Copy>("copyRustDaemonToAssets") {

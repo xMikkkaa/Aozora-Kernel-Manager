@@ -40,10 +40,10 @@ jobs:
         with:
           filters: |
             rust:
-              - 'app/src/main/rust/**'
+              - 'rust/**'
             android:
-              - 'app/src/main/kotlin/**'
-              - 'app/src/main/res/**'
+              - 'manager/app/src/main/kotlin/**'
+              - 'manager/app/src/main/res/**'
               - '*.gradle.kts'
               - '**/*.gradle.kts'
               - 'gradle/**'
@@ -73,7 +73,7 @@ jobs:
 
       - name: Report APK Size
         run: |
-          APK="$(ls app/build/outputs/apk/*/app-*.apk | head -n 1)"
+          APK="$(ls manager/app/build/outputs/apk/*/app-*.apk | head -n 1)"
           SIZE_BYTES="$(stat -c%s "$APK")"
           SIZE_HR="$(du -h "$APK" | cut -f1)"
           {
@@ -94,5 +94,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: Aozora-Manager-APK
-          path: app/build/outputs/apk/*/app-*.apk
+          path: manager/app/build/outputs/apk/*/app-*.apk
           retention-days: 14

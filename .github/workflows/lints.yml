@@ -39,10 +39,10 @@ jobs:
         with:
           filters: |
             rust:
-              - 'app/src/main/rust/**'
+              - 'rust/**'
             android:
-              - 'app/src/main/kotlin/**'
-              - 'app/src/main/res/**'
+              - 'manager/app/src/main/kotlin/**'
+              - 'manager/app/src/main/res/**'
               - '*.gradle.kts'
               - '**/*.gradle.kts'
               - 'gradle/**'
@@ -79,7 +79,7 @@ jobs:
         if: failure()
         with:
           name: Android-Lint-Report
-          path: app/build/reports/lint-results-debug.html
+          path: manager/app/build/reports/lint-results-debug.html
           retention-days: 7
 
   rust-lint-and-test:
@@ -97,14 +97,14 @@ jobs:
           components: rustfmt, clippy
       
       - name: Check Rust JNI
-        working-directory: app/src/main/rust/xaozora_jni
+        working-directory: rust/xaozora_jni
         run: |
           cargo fmt -- --check
           cargo ndk -t arm64-v8a clippy -- -D warnings
           cargo test
           
       - name: Check Rust Daemon (AUTD)
-        working-directory: app/src/main/rust/xaozora_daemon
+        working-directory: rust/xaozora_daemon
         run: |
           cargo fmt -- --check
           cargo ndk -t arm64-v8a clippy -- -D warnings
