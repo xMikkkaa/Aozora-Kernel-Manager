@@ -64,7 +64,10 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-      
+
+      - name: Setup Rust + NDK
+        uses: ./.github/actions/setup-rust-ndk
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
       

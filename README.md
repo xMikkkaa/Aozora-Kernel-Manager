@@ -284,20 +284,23 @@ The project uses GitHub Actions for validation, artifact builds, and releases:
 
 ### Build CI
 
-[`build.yml`](.github/workflows/build.yml) runs on pull requests targeting `kotlin` and on pushes to `kotlin` that affect build or source files. Documentation-only, license, ignore-file, and icon changes are excluded from push builds. It:
+[`build.yml`](.github/workflows/build.yml) runs on pushes to `kotlin` and on pull requests targeting `kotlin`. Push builds skip docs-only changes (`**.md`, `LICENSE`, `.gitignore`, `assets/icon/**`). It:
 
-1. Sets up JDK 17, the stable Rust toolchain, and the Android Rust target.
-2. Installs `cargo-ndk` and configures a real or temporary signing key.
-3. Runs `./gradlew assembleRelease` to compile the Android app and native Rust components.
-4. Uploads the generated APK as the `Aozora-Manager-APK` artifact for 90 days.
+1. Detects changed domains via `dorny/paths-filter` (`rust`: `app/src/main/rust/**`; `android`: Kotlin, res, `*.gradle.kts`, `gradle/**`) and skips the build if neither changed — with `concurrency: cancel-in-progress`.
+2. Sets up JDK 17 (Temurin), Rust stable + `aarch64-linux-android` target, and cached `cargo-ndk` via the composite [`.github/actions/setup-rust-ndk`](.github/actions/setup-rust-ndk/action.yml) (toolchain + `Swatinem/rust-cache` + `taiki-e/install-action`), plus Gradle.
+3. Runs `./gradlew assembleDebug` to compile the Android app and native Rust components.
+4. Reports APK size to the job summary with a 50 MB budget warning, and uploads the APK as the `Aozora-Manager-APK` artifact for 14 days.
 
 ### Lints and Tests
 
-[`lints.yml`](.github/workflows/lints.yml) runs on pushes and pull requests targeting `kotlin`. The Android job runs `lintDebug` and unit tests, while the Rust job checks formatting, runs Clippy for both native crates, and executes available Rust tests. Reports are uploaded when Android lint fails.
+[`lints.yml`](.github/workflows/lints.yml) runs on pushes and pull requests targeting `kotlin` (same docs-only `paths-ignore`, `concurrency: cancel-in-progress`, same per-domain path filter). Gates are enforced — no `|| true` bypass:
+
+- **Android** (only if `android` changed): `./gradlew lintDebug` + `./gradlew testDebugUnitTest`. Lint report uploaded for 7 days on failure.
+- **Rust** (only if `rust` changed): for both `xaozora_jni` and `xaozora_daemon` — `cargo fmt -- --check` (fail-fast), `cargo ndk -t arm64-v8a clippy -- -D warnings`, `cargo test`.
 
 ### Releases
 
-[`release.yml`](.github/workflows/release.yml) runs when a `v*` tag is pushed or by manual dispatch. Release builds require the production signing secrets, generate a changelog from Git history, and publish the signed `app-release.apk` to GitHub Releases.
+[`release.yml`](.github/workflows/release.yml) runs when a `v*` tag is pushed or by manual dispatch. It checks out full history (`fetch-depth: 0`), sets up Java + Rust/NDK via the composite action, and fails hard if `KEYSTORE_BASE64` is missing (no dummy key in release). Then it runs `./gradlew assembleRelease`, stages the fresh output to `app/release/app-release.apk`, verifies the signature with `apksigner verify` and asserts `lib/arm64-v8a/libnative.so` is inside the APK, generates an SPDX SBOM (`sbom-apk.spdx.json`, 14-day artifact), builds a beautified changelog from Git history, publishes the APK to GitHub Releases, and uploads it to Firebase App Distribution (`internal-testers`).
 
 ### Dependency Updates
 
