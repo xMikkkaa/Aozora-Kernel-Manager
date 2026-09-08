@@ -34,9 +34,9 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           if [ ! -z "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > app/aozora.jks
+            echo "$KEYSTORE_BASE64" | base64 -d > manager/app/aozora.jks
             {
-              echo "storeFile=app/aozora.jks"
+              echo "storeFile=manager/app/aozora.jks"
               echo "storePassword=$KEYSTORE_PASSWORD"
               echo "keyAlias=$KEY_ALIAS"
               echo "keyPassword=$KEY_PASSWORD"
@@ -54,13 +54,13 @@ jobs:
 
       - name: Stage Fresh APK
         run: |
-          mkdir -p app/release
-          cp app/build/outputs/apk/release/app-release.apk app/release/app-release.apk
+          mkdir -p manager/app/release
+          cp manager/app/build/outputs/apk/release/app-release.apk manager/app/release/app-release.apk
 
       - name: Verify APK Signature & Native Libs
-        if: hashFiles('app/release/app-release.apk') != ''
+        if: hashFiles('manager/app/release/app-release.apk') != ''
         run: |
-          APK="app/release/app-release.apk"
+          APK="manager/app/release/app-release.apk"
           APKSIGNER=""
           for f in "$ANDROID_HOME"/build-tools/*/apksigner; do
             if [ -x "$f" ]; then
@@ -85,7 +85,7 @@ jobs:
       - name: Generate SBOM (APK)
         uses: anchore/sbom-action@v0
         with:
-          path: app/release/app-release.apk
+          path: manager/app/release/app-release.apk
           format: spdx-json
           output-file: sbom-apk.spdx.json
           upload-artifact: false
@@ -131,7 +131,7 @@ jobs:
           body: |
             ### What's New in ${{ github.ref_name }}
             ${{ env.CHANGELOG }}
-          files: app/release/app-release.apk
+          files: manager/app/release/app-release.apk
           draft: false
           prerelease: false
 
@@ -143,6 +143,6 @@ jobs:
         with:
           appId: ${{ secrets.FIREBASE_APP_ID }}
           serviceCredentialsFile: ${{ runner.temp }}/firebase-sa.json
-          file: app/release/app-release.apk
+          file: manager/app/release/app-release.apk
           groups: internal-testers
           releaseNotes: ${{ env.CHANGELOG }}

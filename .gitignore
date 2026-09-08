@@ -8,7 +8,7 @@
 .cxx
 key.properties
 aozora.jks
-app/aozora.jks
+manager/app/aozora.jks
 key.properties
 .idea/
 *.iws
@@ -18,7 +18,7 @@ INSTRUCTIONS.md
 .artifacts/
 autd_reference/
 flutter_reference/
-app/src/main/rust/xaozora_daemon/target
-app/src/main/rust/xaozora_jni/target
+rust/xaozora_daemon/target
+rust/xaozora_jni/target
 *.patch
-app/release/
+manager/app/release/

@@ -205,15 +205,15 @@ git clone https://github.com/xMikkkaa/Aozora-Kernel-Manager.git
 cd Aozora-Kernel-Manager
 
 # Build Rust JNI library (libnative.so)
-cd app/src/main/rust/xaozora_jni
-cargo ndk -t arm64-v8a -o ../../libs build --release
+cd rust/xaozora_jni
+cargo ndk -t arm64-v8a -o ../../manager/app/src/main/libs build --release
 
 # Build Rust daemon (xaozora_daemon)
 cd ../xaozora_daemon
 cargo ndk -t arm64-v8a build --release
 
 # Return to project root
-cd ../../../../..
+cd ../..
 
 # Build APK (debug)
 ./gradlew assembleDebug
@@ -228,7 +228,7 @@ cd ../../../../..
 ## Project Structure
 
 ```
-├── app/src/main/
+├── manager/app/src/main/
 │   ├── kotlin/com/xaozora/manager/
 │   │   ├── MainActivity.kt              # App entrypoint, root init, daemon startup
 │   │   ├── core/
@@ -249,15 +249,15 @@ cd ../../../../..
 │   │       ├── screens/                  # Home, Tuning, Tweaks, AppManager,
 │   │       │                             # Battery, Settings, About
 │   │       └── theme/                    # Material 3 theme, colors, typography
-│   ├── rust/
-│   │   ├── xaozora_jni/                  # Rust JNI library source
-│   │   │   └── src/                      # shell.rs, cpu.rs, gpu.rs, system_info.rs,
-│   │   │                                 # app_manager.rs, update_manager.rs, services.rs
-│   │   └── xaozora_daemon/              # Rust daemon source
-│   │       └── src/                      # main.rs, autd.rs, ipc.rs, display.rs,
-│   │                                     # game_det.rs, thread_opt.rs, battery.rs, logger.rs
-│   ├── libs/arm64-v8a/                   # Compiled libnative.so
-│   └── assets/                           # Compiled xaozora_daemon binary
+│   ├── libs/arm64-v8a/           # Compiled libnative.so
+│   └── assets/                   # Compiled xaozora_daemon binary
+├── rust/
+│   ├── xaozora_jni/              # Rust JNI library source
+│   │   └── src/                  # shell.rs, cpu.rs, gpu.rs, system_info.rs,
+│   │                             # app_manager.rs, update_manager.rs, services.rs
+│   └── xaozora_daemon/           # Rust daemon source
+│       └── src/                  # main.rs, autd.rs, ipc.rs, display.rs,
+│                                 # game_det.rs, thread_opt.rs, battery.rs, logger.rs
 ├── .github/workflows/                    # Build, lint, test, and release workflows
 ├── .github/dependabot.yml                # Weekly dependency update configuration
 ├── gradle/libs.versions.toml             # Centralized dependency versions
@@ -286,7 +286,7 @@ The project uses GitHub Actions for validation, artifact builds, and releases:
 
 [`build.yml`](.github/workflows/build.yml) runs on pushes to `kotlin` and on pull requests targeting `kotlin`. Push builds skip docs-only changes (`**.md`, `LICENSE`, `.gitignore`, `assets/icon/**`). It:
 
-1. Detects changed domains via `dorny/paths-filter` (`rust`: `app/src/main/rust/**`; `android`: Kotlin, res, `*.gradle.kts`, `gradle/**`) and skips the build if neither changed — with `concurrency: cancel-in-progress`.
+1. Detects changed domains via `dorny/paths-filter` (`rust`: `rust/**`; `android`: Kotlin, res, `*.gradle.kts`, `gradle/**`) and skips the build if neither changed — with `concurrency: cancel-in-progress`.
 2. Sets up JDK 17 (Temurin), Rust stable + `aarch64-linux-android` target, and cached `cargo-ndk` via the composite [`.github/actions/setup-rust-ndk`](.github/actions/setup-rust-ndk/action.yml) (toolchain + `Swatinem/rust-cache` + `taiki-e/install-action`), plus Gradle.
 3. Runs `./gradlew assembleDebug` to compile the Android app and native Rust components.
 4. Reports APK size to the job summary with a 50 MB budget warning, and uploads the APK as the `Aozora-Manager-APK` artifact for 14 days.
@@ -300,15 +300,15 @@ The project uses GitHub Actions for validation, artifact builds, and releases:
 
 ### Releases
 
-[`release.yml`](.github/workflows/release.yml) runs when a `v*` tag is pushed or by manual dispatch. It checks out full history (`fetch-depth: 0`), sets up Java + Rust/NDK via the composite action, and fails hard if `KEYSTORE_BASE64` is missing (no dummy key in release). Then it runs `./gradlew assembleRelease`, stages the fresh output to `app/release/app-release.apk`, verifies the signature with `apksigner verify` and asserts `lib/arm64-v8a/libnative.so` is inside the APK, generates an SPDX SBOM (`sbom-apk.spdx.json`, 14-day artifact), builds a beautified changelog from Git history, publishes the APK to GitHub Releases, and uploads it to Firebase App Distribution (`internal-testers`).
+[`release.yml`](.github/workflows/release.yml) runs when a `v*` tag is pushed or by manual dispatch. It checks out full history (`fetch-depth: 0`), sets up Java + Rust/NDK via the composite action, and fails hard if `KEYSTORE_BASE64` is missing (no dummy key in release). Then it runs `./gradlew assembleRelease`, stages the fresh output to `manager/app/release/app-release.apk`, verifies the signature with `apksigner verify` and asserts `lib/arm64-v8a/libnative.so` is inside the APK, generates an SPDX SBOM (`sbom-apk.spdx.json`, 14-day artifact), builds a beautified changelog from Git history, publishes the APK to GitHub Releases, and uploads it to Firebase App Distribution (`internal-testers`).
 
 ### Dependency Updates
 
 [`dependabot.yml`](.github/dependabot.yml) checks dependencies weekly and groups updates into pull requests for:
 
 - Gradle and Android dependencies in `/`
-- Cargo dependencies in `app/src/main/rust/xaozora_jni`
-- Cargo dependencies in `app/src/main/rust/xaozora_daemon`
+- Cargo dependencies in `rust/xaozora_jni`
+- Cargo dependencies in `rust/xaozora_daemon`
 - GitHub Actions used by the workflows
 
 Dependabot does not require a repository cron job. Pull requests are validated by the Build CI and Lints & Tests workflows before merging.

@@ -12,7 +12,7 @@ updates:
 
   # 2. Update Cargo dependencies (Rust JNI)
   - package-ecosystem: "cargo"
-    directory: "/app/src/main/rust/xaozora_jni"
+    directory: "/rust/xaozora_jni"
     schedule:
       interval: "weekly"
     groups:
@@ -22,7 +22,7 @@ updates:
 
   # 3. Update Cargo dependencies (Rust Daemon)
   - package-ecosystem: "cargo"
-    directory: "/app/src/main/rust/xaozora_daemon"
+    directory: "/rust/xaozora_daemon"
     schedule:
       interval: "weekly"
     groups:
