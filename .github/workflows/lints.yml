@@ -19,11 +19,6 @@ on:
   pull_request:
     branches:
       - kotlin
-    paths-ignore:
-      - '**.md'
-      - 'LICENSE'
-      - '.gitignore'
-      - 'assets/icon/**'
 
 jobs:
   changes:
