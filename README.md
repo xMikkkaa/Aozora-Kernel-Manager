@@ -274,6 +274,7 @@ cd ../../../../..
 | `POST_NOTIFICATIONS` | Foreground service notifications and battery drain alerts (API 33+) |
 | `FOREGROUND_SERVICE` | Running persistent monitoring service |
 | `FOREGROUND_SERVICE_SPECIAL_USE` | Required on API 34+ for system monitoring foreground services |
+| `SYSTEM_ALERT_WINDOW` | Floating Dojo overlay during play (toggle `dojo_kaikin`, no daemon restart) |
 
 > [!NOTE]
 > **Root access** is required but is not an Android permission — it is granted by the root manager (Magisk/KernelSU/APatch) at runtime.
@@ -321,6 +322,7 @@ Dependabot does not require a repository cron job. Pull requests are validated b
 | **Lead Developer** | [xMikkkaa](https://github.com/xMikkkaa) |
 | **Lead Tester** | [Aris](https://github.com/risuue) |
 | **Tester** | [Dutta](https://github.com/DuttaWry) |
+| **Overlay inspiration (Apache-2.0)** | Original [chaldeaprjkt GameSpace](https://github.com/chaldeaprjkt/packages_apps_GameSpace), via fork [AxionAOSP GameSpace](https://github.com/AxionAOSP/android_packages_apps_GameSpace) — SessionService pattern adapted to `DojoOverlayService` (`DOJO_SHOW`/`HIDE`), GameSideBar pill/panel params adapted to `DojoOverlay` pill/panel, GameSession publish flow adapted to `publishKehai`/`clearShiai`, AppSettings toggle adapted to `dojo_kaikin`; UI rewritten in pure Compose |
 
 ## License
 

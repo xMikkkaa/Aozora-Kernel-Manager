@@ -27,6 +27,7 @@ import com.google.gson.Gson
 import com.xaozora.manager.MainActivity
 import com.xaozora.manager.core.models.BatteryStats
 import com.xaozora.manager.core.shell.RootShellHelper
+import com.xaozora.manager.core.utils.DojoOverlayState
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +44,8 @@ class MonitorService : Service() {
         private const val CHANNEL_ID = "xAozoraServiceV3"
         private const val TAG = "MonitorService"
         private var wasCharging = false
+        const val DOJO_EVENT = "com.xaozora.manager.DOJO_EVENT"
+        const val DOJO_EXTRA_KEHAI = "kehai"
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -75,6 +78,18 @@ class MonitorService : Service() {
         }
     }
 
+    private val dojoReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != DOJO_EVENT) return
+            val prefs = context.getSharedPreferences("aozora_prefs", Context.MODE_PRIVATE)
+            if (!prefs.getBoolean("dojo_kaikin", false)) return
+            val kehaiJson = intent.getStringExtra(DOJO_EXTRA_KEHAI) ?: return
+            if (kehaiJson.isBlank()) return
+            val kehai = DojoOverlayState.parseKehai(kehaiJson) ?: return
+            DojoOverlayState.publishKehai(kehai)
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "Service onCreate")
@@ -96,6 +111,17 @@ class MonitorService : Service() {
                 } else {
                     registerReceiver(screenReceiver, filter)
                 }
+
+                val dojoFilter = IntentFilter().apply {
+                    addAction(DOJO_EVENT)
+                }
+
+                androidx.core.content.ContextCompat.registerReceiver(
+                    this@MonitorService,
+                    dojoReceiver,
+                    dojoFilter,
+                    androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+                )
 
                 val uri = Settings.Global.getUriFor("low_power")
                 powerObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
@@ -160,6 +186,9 @@ class MonitorService : Service() {
         isServiceRunning = false
         try {
             unregisterReceiver(screenReceiver)
+        } catch (e: Exception) {}
+        try {
+            unregisterReceiver(dojoReceiver)
         } catch (e: Exception) {}
         
         powerObserver?.let {

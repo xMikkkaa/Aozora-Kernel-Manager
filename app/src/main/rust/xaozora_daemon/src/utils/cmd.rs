@@ -35,6 +35,23 @@ pub fn send_toast(msg: &str) {
         .spawn();
 }
 
+pub fn send_dojo_event(kehai_json: &str) {
+    let _ = Command::new("am")
+        .args([
+            "broadcast",
+            "-a",
+            "com.xaozora.manager.DOJO_EVENT",
+            "--user",
+            "0",
+            "--es",
+            "kehai",
+            kehai_json,
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
+}
+
 pub fn apply_mode(mode: &str) {
     let _ = Command::new(mode)
         .stdout(Stdio::null())

@@ -1,8 +1,33 @@
+/*
+ * Copyright 2026 Aozora Team
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * AppSettings pattern adapted from chaldeaprjkt GameSpace (Apache-2.0)
+ * via AxionAOSP fork (Apache-2.0):
+ * https://github.com/chaldeaprjkt/packages_apps_GameSpace
+ * https://github.com/AxionAOSP/android_packages_apps_GameSpace
+ * dojo_kaikin toggle rewritten in pure Compose, no daemon restart.
+ */
 package com.xaozora.manager.ui.screens.settings
 
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -27,6 +52,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.rounded.AutoMode
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
@@ -42,9 +68,14 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.content.edit
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.xaozora.manager.core.shell.RootShellHelper
 import com.xaozora.manager.core.utils.NativeDaemonManager
+import com.xaozora.manager.services.DojoOverlayService
 import com.xaozora.manager.ui.components.GlassCard
 import com.xaozora.manager.ui.screens.about.AboutScreen
 import com.xaozora.manager.ui.theme.AppThemeMode
@@ -74,6 +105,56 @@ fun SettingsScreen(
     var bannerBias by remember { mutableStateOf(prefs.getFloat("banner_bias", 0.5f)) }
     var showAbout by remember { mutableStateOf(false) }
     var awakeMethod by remember { mutableStateOf("") }
+    var kaikin by remember { mutableStateOf(prefs.getBoolean("dojo_kaikin", false)) }
+
+    val overlayOwner = LocalLifecycleOwner.current
+    DisposableEffect(overlayOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (!Settings.canDrawOverlays(context) && kaikin) {
+                    kaikin = false
+                    prefs.edit { putBoolean("dojo_kaikin", false) }
+                }
+            }
+        }
+        overlayOwner.lifecycle.addObserver(observer)
+        onDispose { overlayOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val overlayPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (Settings.canDrawOverlays(context)) {
+            try {
+                prefs.edit { putBoolean("dojo_kaikin", true) }
+                kaikin = true
+                val showIntent = Intent(context, DojoOverlayService::class.java).apply {
+                    action = DojoOverlayService.DOJO_SHOW
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(showIntent)
+                } else {
+                    context.startService(showIntent)
+                }
+            } catch (e: SecurityException) {
+                prefs.edit { putBoolean("dojo_kaikin", false) }
+                kaikin = false
+                scope.launch { snackbarHostState.showSnackbar("Overlay blocked by system") }
+            } catch (e: android.view.WindowManager.BadTokenException) {
+                prefs.edit { putBoolean("dojo_kaikin", false) }
+                kaikin = false
+                scope.launch { snackbarHostState.showSnackbar("Overlay blocked by system") }
+            }
+        } else {
+            prefs.edit { putBoolean("dojo_kaikin", false) }
+            kaikin = false
+            scope.launch { snackbarHostState.showSnackbar("Overlay permission required") }
+        }
+    }
+
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { }
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -201,6 +282,77 @@ fun SettingsScreen(
                     }
                 )
                 
+                Spacer(modifier = Modifier.height(16.dp))
+
+                SettingsToggleCard(
+                    title = "Dojo Overlay",
+                    subtitle = "Show floating overlay during play",
+                    icon = Icons.Outlined.PlayArrow,
+                    checked = kaikin,
+                    hazeState = hazeState,
+                    onCheckedChange = { newVal ->
+                        if (newVal) {
+                            if (!Settings.canDrawOverlays(context)) {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Overlay permission required")
+                                }
+                                try {
+                                    val permIntent = Intent(
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:${context.packageName}")
+                                    ).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    overlayPermissionLauncher.launch(permIntent)
+                                } catch (e: Exception) {
+                                    prefs.edit { putBoolean("dojo_kaikin", false) }
+                                    kaikin = false
+                                }
+                            } else {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    if (ContextCompat.checkSelfPermission(
+                                            context,
+                                            android.Manifest.permission.POST_NOTIFICATIONS
+                                        ) != PackageManager.PERMISSION_GRANTED
+                                    ) {
+                                        notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                    }
+                                }
+                                try {
+                                    prefs.edit { putBoolean("dojo_kaikin", true) }
+                                    kaikin = true
+                                    val showIntent = Intent(context, DojoOverlayService::class.java).apply {
+                                        action = DojoOverlayService.DOJO_SHOW
+                                    }
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                        context.startForegroundService(showIntent)
+                                    } else {
+                                        context.startService(showIntent)
+                                    }
+                                } catch (e: SecurityException) {
+                                    prefs.edit { putBoolean("dojo_kaikin", false) }
+                                    kaikin = false
+                                    scope.launch { snackbarHostState.showSnackbar("Overlay blocked by system") }
+                                } catch (e: android.view.WindowManager.BadTokenException) {
+                                    prefs.edit { putBoolean("dojo_kaikin", false) }
+                                    kaikin = false
+                                    scope.launch { snackbarHostState.showSnackbar("Overlay blocked by system") }
+                                }
+                            }
+                        } else {
+                            kaikin = false
+                            prefs.edit { putBoolean("dojo_kaikin", false) }
+                            try {
+                                val hideIntent = Intent(context, DojoOverlayService::class.java).apply {
+                                    action = DojoOverlayService.DOJO_HIDE
+                                }
+                                context.startService(hideIntent)
+                            } catch (e: Exception) {
+                            }
+                        }
+                    }
+                )
+
                 Spacer(modifier = Modifier.height(16.dp))
 
                 SettingsToggleCard(

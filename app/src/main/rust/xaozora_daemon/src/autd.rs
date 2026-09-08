@@ -22,6 +22,29 @@ use std::time::Duration;
 
 use crate::{RUNNING, config, monitor, process, utils};
 
+const SHIAI_END_DEBOUNCE_CYCLES: u32 = 2;
+
+#[derive(serde::Serialize)]
+struct KehaiEvent {
+    shiai: String,
+    asobi: String,
+    pid: i32,
+    phase: String,
+}
+
+fn emit_kehai(shiai: &str, asobi: &str, pid: i32, phase: &str) {
+    let kehai = KehaiEvent {
+        shiai: shiai.to_owned(),
+        asobi: asobi.to_owned(),
+        pid,
+        phase: phase.to_owned(),
+    };
+    if let Ok(kehai_json) = serde_json::to_string(&kehai) {
+        let _ = fs::write(config::DOJO_KEHAI_PATH, &kehai_json);
+        utils::cmd::send_dojo_event(&kehai_json);
+    }
+}
+
 pub fn perform_cleanup() -> bool {
     let mut actually_cleaned = false;
     if fs::metadata(config::AUTD_STATUS_PATH).is_ok() {
@@ -55,6 +78,10 @@ pub fn run_autd() {
 
     let mut low_bat_notif_sent = false;
     let mut idle_cycles = 0;
+    let mut shiai_session = String::with_capacity(128);
+    let mut shiai_asobi = String::with_capacity(32);
+    let mut shiai_pid: i32 = 0;
+    let mut shiai_missing_cycles: u32 = 0;
 
     interruptible_sleep(1);
     monitor::battery::init_backup_once();
@@ -184,6 +211,19 @@ pub fn run_autd() {
                 idle_cycles = 0;
             }
 
+            shiai_missing_cycles = 0;
+            if shiai_session != current_game || shiai_asobi != chosen_mode {
+                shiai_session.clear();
+                shiai_session.push_str(&current_game);
+                shiai_asobi.clear();
+                shiai_asobi.push_str(&chosen_mode);
+                shiai_pid = game_pid;
+                emit_kehai(&shiai_session, &shiai_asobi, shiai_pid, "start");
+            } else if shiai_pid != game_pid {
+                shiai_pid = game_pid;
+                emit_kehai(&shiai_session, &shiai_asobi, shiai_pid, "stay");
+            }
+
             if game_pid > 0 {
                 if is_optimize_allowed {
                     if hydra_enabled {
@@ -235,6 +275,16 @@ pub fn run_autd() {
                 let _ = fs::write(config::KERNEL_SCHED_LIB_NAME_PATH, " ");
                 sched_lib_active = false;
             }
+            if !shiai_session.is_empty() {
+                shiai_missing_cycles += 1;
+                if shiai_missing_cycles >= SHIAI_END_DEBOUNCE_CYCLES {
+                    emit_kehai(&shiai_session, &shiai_asobi, shiai_pid, "end");
+                    shiai_session.clear();
+                    shiai_asobi.clear();
+                    shiai_pid = 0;
+                    shiai_missing_cycles = 0;
+                }
+            }
         } else {
             if last_mode != user_base {
                 utils::cmd::apply_mode(&user_base);
@@ -255,6 +305,16 @@ pub fn run_autd() {
                 let _ = fs::write(config::KERNEL_SCHED_LIB_MASK_PATH, "0");
                 let _ = fs::write(config::KERNEL_SCHED_LIB_NAME_PATH, " ");
                 sched_lib_active = false;
+            }
+            if !shiai_session.is_empty() {
+                shiai_missing_cycles += 1;
+                if shiai_missing_cycles >= SHIAI_END_DEBOUNCE_CYCLES {
+                    emit_kehai(&shiai_session, &shiai_asobi, shiai_pid, "end");
+                    shiai_session.clear();
+                    shiai_asobi.clear();
+                    shiai_pid = 0;
+                    shiai_missing_cycles = 0;
+                }
             }
         }
 

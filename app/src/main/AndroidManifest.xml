@@ -12,6 +12,7 @@
         tools:ignore="ForegroundServicesPolicy" />
     
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:allowBackup="true"
@@ -43,6 +44,16 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_TYPE"
                 android:value="Monitoring system state and managing automation daemon for kernel tuning." />
+        </service>
+
+        <service
+            android:name=".services.DojoOverlayService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_TYPE"
+                android:value="Displaying game overlay for active gaming sessions." />
         </service>
 
         <receiver

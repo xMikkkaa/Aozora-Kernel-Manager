@@ -17,12 +17,12 @@ data class AppInfoItem(
 
 data class ConfiguredAppParsed(
     @SerializedName("package_name") val packageName: String,
-    val mode: String
+    @SerializedName("mode") val shugyoProfile: String
 )
 
 data class ConfiguredApp(
     val app: AppInfoItem,
-    val mode: String
+    val shugyoProfile: String
 )
 
 object AppManagerUtils {
@@ -61,7 +61,7 @@ object AppManagerUtils {
         
         parsedApps.mapNotNull { parsed ->
             val matchedApp = installedApps.find { it.packageName == parsed.packageName }
-            if (matchedApp != null) ConfiguredApp(matchedApp, parsed.mode) else null
+            if (matchedApp != null) ConfiguredApp(matchedApp, parsed.shugyoProfile) else null
         }
     }
 }

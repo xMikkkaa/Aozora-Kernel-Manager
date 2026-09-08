@@ -31,6 +31,7 @@ pub const AUTD_AWAKE_DEBUG_LOG: &str = "autd/autd_awake_method.info";
 pub const GAME_MODE_DIR: &str = "/dev/cpuset/game-mode";
 pub const AUTD_EVENT_PIPE: &str = "autd/events.pipe";
 pub const AUTD_HYDRA_ENABLE_PATH: &str = "autd/autd_hydra_enable";
+pub const DOJO_KEHAI_PATH: &str = "autd/dojo_kehai";
 
 pub const KERNEL_HYDRA_PID_PATH: &str = "/proc/sys/kernel/hydra_pid";
 pub const KERNEL_SCHED_LIB_MASK_PATH: &str = "/proc/sys/kernel/sched_lib_mask_force";
