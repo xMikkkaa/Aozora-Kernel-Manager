@@ -25,6 +25,27 @@ data class ConfiguredApp(
     val mode: String
 )
 
+data class AppProfile(
+    val code: String,
+    val suffix: String,
+    val profileId: String,
+    val label: String
+)
+
+object AppProfiles {
+    val Powersave = AppProfile("s", "_s", "powersave", "Power Save")
+    val Balance = AppProfile("b", "_b", "balance", "Balance")
+    val Performance = AppProfile("p", "_p", "performance", "Performance")
+    val Gaming = AppProfile("g", "_g", "gaming", "Gaming")
+    val Gaming2 = AppProfile("g2", "_g2", "gaming2", "Gaming 2")
+
+    val all: List<AppProfile> = listOf(Powersave, Balance, Performance, Gaming, Gaming2)
+
+    fun fromCode(code: String): AppProfile? = all.find { it.code == code }
+
+    fun isSupported(code: String): Boolean = fromCode(code) != null
+}
+
 object AppManagerUtils {
     init {
         System.loadLibrary("native")

@@ -27,6 +27,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.rounded.Android
+import androidx.compose.material.icons.rounded.Balance
+import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SportsEsports
@@ -71,6 +73,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import com.xaozora.manager.core.shell.RootShellHelper
 import com.xaozora.manager.core.utils.AppInfoItem
 import com.xaozora.manager.core.utils.AppManagerUtils
+import com.xaozora.manager.core.utils.AppProfiles
 import com.xaozora.manager.core.utils.ConfiguredApp
 import com.xaozora.manager.ui.components.GlassCard
 import dev.chrisbanes.haze.HazeState
@@ -115,7 +118,10 @@ fun AppManagerScreen(
 
             val apps = AppManagerUtils.getConfiguredApps(context)
             val correctedApps = apps.map { config ->
-                if ((config.mode == "g" && !gExists) || (config.mode == "g2" && !g2Exists)) {
+                val needsFallback = !AppProfiles.isSupported(config.mode) ||
+                    (config.mode == "g" && !gExists) ||
+                    (config.mode == "g2" && !g2Exists)
+                if (needsFallback) {
                     val packageName = config.app.packageName
                         val appListPath = "${context.filesDir.absolutePath}/autd/applist"
                         val cmd = "sed -i '/^${packageName}_/d' $appListPath; echo \"${packageName}_p\" >> $appListPath"
@@ -165,12 +171,7 @@ fun AppManagerScreen(
             val appListPath = "${context.filesDir.absolutePath}/autd/applist"
             val cmd = "sed -i '/^${packageName}_/d' $appListPath; echo \"${packageName}_$newMode\" >> $appListPath"
             if (RootShellHelper.executeCmd(cmd)) {
-                val modeLabel = when (newMode) {
-                    "p" -> "Power"
-                    "g" -> "Game"
-                    "v" -> "Video"
-                    else -> newMode
-                }
+                val modeLabel = AppProfiles.fromCode(newMode)?.label ?: newMode
                 scope.launch { snackbarHostState.showSnackbar("Profile changed to $modeLabel for ${app.name}") }
                 refreshApps()
             } else {
@@ -351,15 +352,13 @@ fun AppManagerScreen(
 private fun ConfiguredAppItem(config: ConfiguredApp, hazeState: HazeState, onClick: () -> Unit) {
     val colorScheme = MaterialTheme.colorScheme
     val badgeColor = when (config.mode) {
+        "s" -> Color(0xFF66BB6A)
+        "b" -> Color(0xFF26A69A)
         "g" -> Color(0xFFFFC107)
         "g2" -> Color(0xFFFF5252)
         else -> Color(0xFF448AFF)
     }
-    val badgeText = when (config.mode) {
-        "g" -> "Gaming"
-        "g2" -> "Gaming+"
-        else -> "Perf"
-    }
+    val badgeText = AppProfiles.fromCode(config.mode)?.label ?: "Performance"
 
     GlassCard(
         modifier = Modifier
@@ -420,9 +419,11 @@ private fun EditAppSheetContent(
     var selectedMode by remember { mutableStateOf(config.mode) }
     val modes = remember(gamingExists, gaming2Exists) {
         listOfNotNull(
-            "p" to "Perf",
-            if (gamingExists) "g" to "Gaming" else null,
-            if (gaming2Exists) "g2" to "Gaming+" else null
+            AppProfiles.Powersave,
+            AppProfiles.Balance,
+            AppProfiles.Performance,
+            AppProfiles.Gaming.takeIf { gamingExists },
+            AppProfiles.Gaming2.takeIf { gaming2Exists }
         )
     }
     val colorScheme = MaterialTheme.colorScheme
@@ -454,20 +455,26 @@ private fun EditAppSheetContent(
         Spacer(modifier = Modifier.height(16.dp))
 
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            modes.forEachIndexed { index, (modeValue, modeLabel) ->
+            modes.forEachIndexed { index, profile ->
                 SegmentedButton(
-                    selected = selectedMode == modeValue,
-                    onClick = { selectedMode = modeValue; onUpdateMode(config.app.packageName, modeValue) },
+                    selected = selectedMode == profile.code,
+                    onClick = { selectedMode = profile.code; onUpdateMode(config.app.packageName, profile.code) },
                     shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
                     icon = {
-                        if (selectedMode == modeValue) {
+                        if (selectedMode == profile.code) {
                             Icon(
-                                imageVector = when (modeValue) { "p" -> Icons.Rounded.RocketLaunch; "g" -> Icons.Rounded.SportsEsports; else -> Icons.Rounded.VideogameAsset },
+                                imageVector = when (profile.code) {
+                                    "s" -> Icons.Rounded.BatterySaver
+                                    "b" -> Icons.Rounded.Balance
+                                    "p" -> Icons.Rounded.RocketLaunch
+                                    "g" -> Icons.Rounded.SportsEsports
+                                    else -> Icons.Rounded.VideogameAsset
+                                },
                                 contentDescription = null, modifier = Modifier.size(18.dp)
                             )
                         }
                     }
-                ) { Text(modeLabel) }
+                ) { Text(profile.label, maxLines = 1) }
             }
         }
         Spacer(modifier = Modifier.height(32.dp))

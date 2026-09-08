@@ -155,7 +155,11 @@ pub fn run_autd() {
         process::game_det::load_filelist_if_changed();
 
         let game_check = process::game_det::find_game_process();
-        let game_found = game_check.is_some();
+        let has_game = game_check.is_some();
+        let perf_game_found = match &game_check {
+            Some((_, chosen_mode, _)) => process::game_det::is_game_profile(chosen_mode),
+            None => false,
+        };
         let hydra_supported = std::path::Path::new(config::KERNEL_HYDRA_PID_PATH).exists();
         let sched_lib_supported = std::path::Path::new(config::KERNEL_SCHED_LIB_NAME_PATH).exists();
         let user_wants_hydra = if let Ok(bytes) = fs::read(config::AUTD_HYDRA_ENABLE_PATH) {
@@ -165,7 +169,7 @@ pub fn run_autd() {
         };
         let hydra_enabled = hydra_supported && user_wants_hydra;
 
-        if game_found && is_idle_charging_enabled {
+        if perf_game_found && is_idle_charging_enabled {
             monitor::battery::enable_idle_charging();
         } else {
             monitor::battery::disable_idle_charging();
@@ -185,7 +189,7 @@ pub fn run_autd() {
             }
 
             if game_pid > 0 {
-                if is_optimize_allowed {
+                if is_optimize_allowed && process::game_det::is_game_profile(&chosen_mode) {
                     if hydra_enabled {
                         if last_hydra_pid != game_pid {
                             let _ = fs::write(config::KERNEL_HYDRA_PID_PATH, game_pid.to_string());
@@ -267,7 +271,7 @@ pub fn run_autd() {
 
         let _ = fs::write(config::AUTD_STATUS_PATH, &last_mode);
 
-        if !game_found && bat_level > 20 && !ps_active {
+        if !has_game && bat_level > 20 && !ps_active {
             idle_cycles += 1;
         } else {
             idle_cycles = 0;

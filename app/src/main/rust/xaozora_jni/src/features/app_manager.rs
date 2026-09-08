@@ -27,12 +27,19 @@ pub fn get_configured_apps(app_list_path: &str) -> Vec<ConfiguredApp> {
         .lines()
         .filter_map(|line| {
             let trimmed = line.trim();
-            let mode = if trimmed.ends_with("_p") {
-                "p"
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                return None;
+            }
+            let mode = if trimmed.ends_with("_g2") {
+                "g2"
             } else if trimmed.ends_with("_g") {
                 "g"
-            } else if trimmed.ends_with("_g2") {
-                "g2"
+            } else if trimmed.ends_with("_p") {
+                "p"
+            } else if trimmed.ends_with("_s") {
+                "s"
+            } else if trimmed.ends_with("_b") {
+                "b"
             } else {
                 return None;
             };

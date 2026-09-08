@@ -27,6 +27,10 @@ pub struct FileEntry {
 
 static FILE_ENTRIES: Mutex<(Option<SystemTime>, Vec<FileEntry>)> = Mutex::new((None, Vec::new()));
 
+pub fn is_game_profile(mode: &str) -> bool {
+    matches!(mode, "gaming" | "gaming2" | "performance")
+}
+
 pub fn load_filelist_if_changed() {
     let mtime = match fs::metadata(crate::config::FILELIST_PATH).and_then(|m| m.modified()) {
         Ok(t) => t,
@@ -67,12 +71,16 @@ pub fn load_filelist_if_changed() {
             continue;
         }
 
-        let (base_name, mode) = if line.ends_with("_g2") {
-            (&line[..line.len() - 3], "gaming2")
-        } else if line.ends_with("_g") {
-            (&line[..line.len() - 2], "gaming")
-        } else if line.ends_with("_p") {
-            (&line[..line.len() - 2], "performance")
+        let (base_name, mode) = if let Some(stripped) = line.strip_suffix("_g2") {
+            (stripped, "gaming2")
+        } else if let Some(stripped) = line.strip_suffix("_g") {
+            (stripped, "gaming")
+        } else if let Some(stripped) = line.strip_suffix("_p") {
+            (stripped, "performance")
+        } else if let Some(stripped) = line.strip_suffix("_s") {
+            (stripped, "powersave")
+        } else if let Some(stripped) = line.strip_suffix("_b") {
+            (stripped, "balance")
         } else {
             (line, "performance")
         };
