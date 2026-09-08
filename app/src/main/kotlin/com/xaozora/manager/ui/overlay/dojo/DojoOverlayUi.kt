@@ -23,39 +23,29 @@ package com.xaozora.manager.ui.overlay.dojo
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.VideogameAsset
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.xaozora.manager.core.utils.AsobiMode
@@ -88,9 +78,9 @@ fun DojoOverlay(
 ) {
     Box(modifier = modifier) {
         if (!kaikin) {
-            DojoPill(onTap = { onKaikinChange(true) }, onDrag = onDrag)
+            DojoEdgeTab(onTap = { onKaikinChange(true) }, onDrag = onDrag)
         } else {
-            DojoPanel(
+            DojoToolbar(
                 shiai = shiai,
                 kehai = kehai,
                 onKehaiChange = onKehaiChange,
@@ -101,11 +91,12 @@ fun DojoOverlay(
 }
 
 @Composable
-private fun DojoPill(
+private fun DojoEdgeTab(
     onTap: () -> Unit,
     onDrag: (Float, Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     Surface(
         onClick = onTap,
         modifier = modifier.pointerInput(Unit) {
@@ -114,27 +105,27 @@ private fun DojoPill(
                 onDrag(dragAmount.x, dragAmount.y)
             }
         },
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        shape = RoundedCornerShape(12.dp),
+        color = colorScheme.surfaceContainerHighest.copy(alpha = 0.78f),
+        contentColor = colorScheme.onSurfaceVariant,
         tonalElevation = 3.dp,
         shadowElevation = 6.dp
     ) {
         Box(
-            modifier = Modifier.size(56.dp),
+            modifier = Modifier.size(width = 36.dp, height = 76.dp),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Rounded.SportsEsports,
-                contentDescription = null,
-                modifier = Modifier.size(28.dp)
+                imageVector = Icons.Rounded.ChevronRight,
+                contentDescription = "Buka panel dojo",
+                modifier = Modifier.size(22.dp)
             )
         }
     }
 }
 
 @Composable
-private fun DojoPanel(
+private fun DojoToolbar(
     shiai: ShiaiSession?,
     kehai: Boolean,
     onKehaiChange: (Boolean) -> Unit,
@@ -143,80 +134,69 @@ private fun DojoPanel(
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val asobi = shiai?.asobi ?: AsobiMode.UNKNOWN
-    ElevatedCard(
-        modifier = modifier.width(320.dp),
-        shape = RoundedCornerShape(28.dp)
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(24.dp),
+        color = colorScheme.inverseSurface.copy(alpha = 0.94f),
+        contentColor = colorScheme.inverseOnSurface,
+        tonalElevation = 3.dp,
+        shadowElevation = 6.dp
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    shape = CircleShape,
-                    color = colorScheme.primaryContainer,
-                    contentColor = colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = asobiIcon(asobi),
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
+        Column(
+            modifier = Modifier.padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            IconButton(onClick = onClose) {
+                Icon(
+                    imageVector = Icons.Rounded.Close,
+                    contentDescription = "Ciutkan panel"
+                )
+            }
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 4.dp),
+                color = colorScheme.inverseOnSurface.copy(alpha = 0.16f)
+            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(onClick = { onKehaiChange(!kehai) }) {
+                    Icon(
+                        imageVector = asobiIcon(asobi),
+                        contentDescription = asobiLabel(asobi)
+                    )
                 }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = asobiLabel(asobi),
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            AnimatedVisibility(visible = kehai) {
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = 200.dp)
+                        .padding(top = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Text(
                         text = shiai?.shiai ?: "Dojo",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        maxLines = 1,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = if (shiai == null) "Menunggu shiai" else "pid ${shiai.pid}",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = colorScheme.onSurfaceVariant
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = colorScheme.inverseOnSurface.copy(alpha = 0.72f)
                         ),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                }
-                IconButton(onClick = onClose) {
-                    Icon(imageVector = Icons.Rounded.Close, contentDescription = null)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-            AssistChip(
-                onClick = { onKehaiChange(!kehai) },
-                label = { Text(asobiLabel(asobi)) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Rounded.Info,
-                        contentDescription = null,
-                        modifier = Modifier.size(AssistChipDefaults.IconSize)
-                    )
-                }
-            )
-
-            AnimatedVisibility(visible = kehai) {
-                Column {
-                    Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = "shiai berjalan dengan profil ${asobiLabel(asobi)}",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            color = colorScheme.onSurfaceVariant
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = colorScheme.inverseOnSurface.copy(alpha = 0.72f)
                         )
                     )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(onClick = { onKehaiChange(!kehai) }) {
-                    Text(if (kehai) "Sembunyi info" else "Info")
                 }
             }
         }

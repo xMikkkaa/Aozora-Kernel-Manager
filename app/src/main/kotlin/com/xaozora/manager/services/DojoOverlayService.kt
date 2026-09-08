@@ -36,6 +36,7 @@ import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
 import android.view.WindowManager
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -105,12 +106,11 @@ class DojoOverlayService : Service() {
         if (!Settings.canDrawOverlays(this)) return
         prepareOverlay()
         serviceScope.launch {
-            DojoOverlayState.kehaiEvents.collect { kehai ->
-                if (viewAttached) {
-                    try {
-                        windowManager?.updateViewLayout(composeView, overlayParams)
-                    } catch (_: Exception) {
-                    }
+            DojoOverlayState.shiai.collect { sesi ->
+                if (sesi == null) {
+                    hideOverlay()
+                } else {
+                    showOverlay()
                 }
             }
         }
@@ -127,7 +127,11 @@ class DojoOverlayService : Service() {
                     val kehai = DojoOverlayState.parseKehai(kehaiJson)
                     if (kehai != null) DojoOverlayState.publishKehai(kehai)
                 }
-                showOverlay()
+                if (DojoOverlayState.shiai.value == null) {
+                    hideOverlay()
+                } else {
+                    showOverlay()
+                }
             }
             DOJO_HIDE -> {
                 hideOverlay()
@@ -183,16 +187,19 @@ class DojoOverlayService : Service() {
             val shiai by DojoOverlayState.shiai.collectAsState()
             var kaikin by remember { mutableStateOf(false) }
             var kehai by remember { mutableStateOf(false) }
+            LaunchedEffect(shiai) {
+                if (shiai == null) {
+                    kaikin = false
+                    kehai = false
+                }
+            }
             DojoOverlay(
                 shiai = shiai,
                 kaikin = kaikin,
                 onKaikinChange = { kaikin = it },
                 kehai = kehai,
                 onKehaiChange = { kehai = it },
-                onClose = {
-                    hideOverlay()
-                    DojoOverlayState.clearShiai()
-                },
+                onClose = { kaikin = false },
                 onDrag = { dx, dy -> moveOverlay(dx, dy) }
             )
         }
