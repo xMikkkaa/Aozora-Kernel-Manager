@@ -4,8 +4,11 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -43,9 +46,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -61,6 +61,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -73,6 +74,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import com.xaozora.manager.core.shell.RootShellHelper
 import com.xaozora.manager.core.utils.AppInfoItem
 import com.xaozora.manager.core.utils.AppManagerUtils
+import com.xaozora.manager.core.utils.AppProfile
 import com.xaozora.manager.core.utils.AppProfiles
 import com.xaozora.manager.core.utils.ConfiguredApp
 import com.xaozora.manager.ui.components.GlassCard
@@ -331,6 +333,7 @@ fun AppManagerScreen(
                     }
                     EditAppSheetContent(
                         config = config,
+                        hazeState = hazeState,
                         onUpdateMode = { _, mode ->
                             appToEdit = null
                             updateAppConfig(config.app, mode)
@@ -348,16 +351,26 @@ fun AppManagerScreen(
     }
 }
 
+private fun profileColor(code: String): Color = when (code) {
+    "s" -> Color(0xFF66BB6A)
+    "b" -> Color(0xFF26A69A)
+    "g" -> Color(0xFFFFC107)
+    "g2" -> Color(0xFFFF5252)
+    else -> Color(0xFF448AFF)
+}
+
+private fun profileIcon(code: String): ImageVector = when (code) {
+    "s" -> Icons.Rounded.BatterySaver
+    "b" -> Icons.Rounded.Balance
+    "p" -> Icons.Rounded.RocketLaunch
+    "g" -> Icons.Rounded.SportsEsports
+    else -> Icons.Rounded.VideogameAsset
+}
+
 @Composable
 private fun ConfiguredAppItem(config: ConfiguredApp, hazeState: HazeState, onClick: () -> Unit) {
     val colorScheme = MaterialTheme.colorScheme
-    val badgeColor = when (config.mode) {
-        "s" -> Color(0xFF66BB6A)
-        "b" -> Color(0xFF26A69A)
-        "g" -> Color(0xFFFFC107)
-        "g2" -> Color(0xFFFF5252)
-        else -> Color(0xFF448AFF)
-    }
+    val badgeColor = profileColor(config.mode)
     val badgeText = AppProfiles.fromCode(config.mode)?.label ?: "Performance"
 
     GlassCard(
@@ -407,10 +420,11 @@ private fun ConfiguredAppItem(config: ConfiguredApp, hazeState: HazeState, onCli
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun EditAppSheetContent(
     config: ConfiguredApp,
+    hazeState: HazeState,
     onUpdateMode: (String, String) -> Unit,
     onRemove: (String) -> Unit,
     gamingExists: Boolean,
@@ -454,27 +468,18 @@ private fun EditAppSheetContent(
         )
         Spacer(modifier = Modifier.height(16.dp))
 
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            modes.forEachIndexed { index, profile ->
-                SegmentedButton(
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            modes.forEach { profile ->
+                ProfilePill(
+                    profile = profile,
                     selected = selectedMode == profile.code,
-                    onClick = { selectedMode = profile.code; onUpdateMode(config.app.packageName, profile.code) },
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
-                    icon = {
-                        if (selectedMode == profile.code) {
-                            Icon(
-                                imageVector = when (profile.code) {
-                                    "s" -> Icons.Rounded.BatterySaver
-                                    "b" -> Icons.Rounded.Balance
-                                    "p" -> Icons.Rounded.RocketLaunch
-                                    "g" -> Icons.Rounded.SportsEsports
-                                    else -> Icons.Rounded.VideogameAsset
-                                },
-                                contentDescription = null, modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                ) { Text(profile.label, maxLines = 1) }
+                    hazeState = hazeState,
+                    onClick = { selectedMode = profile.code; onUpdateMode(config.app.packageName, profile.code) }
+                )
             }
         }
         Spacer(modifier = Modifier.height(32.dp))
@@ -489,6 +494,54 @@ private fun EditAppSheetContent(
             Text("Remove from list")
         }
         Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun ProfilePill(
+    profile: AppProfile,
+    selected: Boolean,
+    hazeState: HazeState,
+    onClick: () -> Unit
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    val accent = profileColor(profile.code)
+    val pillStyle = remember(accent, selected) {
+        HazeStyle(
+            blurRadius = 25.dp,
+            noiseFactor = 0.1f,
+            tints = listOf(HazeTint(accent.copy(alpha = if (selected) 0.3f else 0.12f)))
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .hazeEffect(state = hazeState, style = pillStyle)
+            .background(Color.Transparent)
+            .border(
+                width = 1.dp,
+                color = (if (selected) accent else colorScheme.outlineVariant).copy(alpha = 0.5f),
+                shape = RoundedCornerShape(50)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = profileIcon(profile.code),
+                contentDescription = null,
+                tint = if (selected) accent else colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = profile.label,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = if (selected) accent else colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
