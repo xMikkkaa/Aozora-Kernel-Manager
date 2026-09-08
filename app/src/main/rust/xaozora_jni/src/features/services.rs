@@ -159,13 +159,12 @@ pub extern "system" fn Java_com_xaozora_manager_services_ProfileTileService_appl
     _class: JClass,
     profile_id: JString,
 ) {
-    let _ = env
-        .with_env(|env| -> jni::errors::Result<()> {
-            let profile = profile_id.try_to_string(env).unwrap();
-            apply_profile(&profile);
-            Ok(())
-        })
-        .resolve::<ThrowRuntimeExAndDefault>();
+    env.with_env(|env| -> jni::errors::Result<()> {
+        let profile = profile_id.try_to_string(env).unwrap();
+        apply_profile(&profile);
+        Ok(())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>();
 }
 
 #[no_mangle]

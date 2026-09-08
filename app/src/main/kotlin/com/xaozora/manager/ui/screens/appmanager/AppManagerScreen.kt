@@ -4,8 +4,11 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,6 +30,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.rounded.Android
+import androidx.compose.material.icons.rounded.Balance
+import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SportsEsports
@@ -41,9 +46,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -59,6 +61,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -71,6 +74,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import com.xaozora.manager.core.shell.RootShellHelper
 import com.xaozora.manager.core.utils.AppInfoItem
 import com.xaozora.manager.core.utils.AppManagerUtils
+import com.xaozora.manager.core.utils.AppProfile
+import com.xaozora.manager.core.utils.AppProfiles
 import com.xaozora.manager.core.utils.ConfiguredApp
 import com.xaozora.manager.ui.components.GlassCard
 import dev.chrisbanes.haze.HazeState
@@ -115,7 +120,10 @@ fun AppManagerScreen(
 
             val apps = AppManagerUtils.getConfiguredApps(context)
             val correctedApps = apps.map { config ->
-                if ((config.mode == "g" && !gExists) || (config.mode == "g2" && !g2Exists)) {
+                val needsFallback = !AppProfiles.isSupported(config.mode) ||
+                    (config.mode == "g" && !gExists) ||
+                    (config.mode == "g2" && !g2Exists)
+                if (needsFallback) {
                     val packageName = config.app.packageName
                         val appListPath = "${context.filesDir.absolutePath}/autd/applist"
                         val cmd = "sed -i '/^${packageName}_/d' $appListPath; echo \"${packageName}_p\" >> $appListPath"
@@ -165,12 +173,7 @@ fun AppManagerScreen(
             val appListPath = "${context.filesDir.absolutePath}/autd/applist"
             val cmd = "sed -i '/^${packageName}_/d' $appListPath; echo \"${packageName}_$newMode\" >> $appListPath"
             if (RootShellHelper.executeCmd(cmd)) {
-                val modeLabel = when (newMode) {
-                    "p" -> "Power"
-                    "g" -> "Game"
-                    "v" -> "Video"
-                    else -> newMode
-                }
+                val modeLabel = AppProfiles.fromCode(newMode)?.label ?: newMode
                 scope.launch { snackbarHostState.showSnackbar("Profile changed to $modeLabel for ${app.name}") }
                 refreshApps()
             } else {
@@ -330,6 +333,7 @@ fun AppManagerScreen(
                     }
                     EditAppSheetContent(
                         config = config,
+                        hazeState = hazeState,
                         onUpdateMode = { _, mode ->
                             appToEdit = null
                             updateAppConfig(config.app, mode)
@@ -347,19 +351,27 @@ fun AppManagerScreen(
     }
 }
 
+private fun profileColor(code: String): Color = when (code) {
+    "s" -> Color(0xFF66BB6A)
+    "b" -> Color(0xFF26A69A)
+    "g" -> Color(0xFFFFC107)
+    "g2" -> Color(0xFFFF5252)
+    else -> Color(0xFF448AFF)
+}
+
+private fun profileIcon(code: String): ImageVector = when (code) {
+    "s" -> Icons.Rounded.BatterySaver
+    "b" -> Icons.Rounded.Balance
+    "p" -> Icons.Rounded.RocketLaunch
+    "g" -> Icons.Rounded.SportsEsports
+    else -> Icons.Rounded.VideogameAsset
+}
+
 @Composable
 private fun ConfiguredAppItem(config: ConfiguredApp, hazeState: HazeState, onClick: () -> Unit) {
     val colorScheme = MaterialTheme.colorScheme
-    val badgeColor = when (config.mode) {
-        "g" -> Color(0xFFFFC107)
-        "g2" -> Color(0xFFFF5252)
-        else -> Color(0xFF448AFF)
-    }
-    val badgeText = when (config.mode) {
-        "g" -> "Gaming"
-        "g2" -> "Gaming+"
-        else -> "Perf"
-    }
+    val badgeColor = profileColor(config.mode)
+    val badgeText = AppProfiles.fromCode(config.mode)?.label ?: "Performance"
 
     GlassCard(
         modifier = Modifier
@@ -408,10 +420,11 @@ private fun ConfiguredAppItem(config: ConfiguredApp, hazeState: HazeState, onCli
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun EditAppSheetContent(
     config: ConfiguredApp,
+    hazeState: HazeState,
     onUpdateMode: (String, String) -> Unit,
     onRemove: (String) -> Unit,
     gamingExists: Boolean,
@@ -420,9 +433,11 @@ private fun EditAppSheetContent(
     var selectedMode by remember { mutableStateOf(config.mode) }
     val modes = remember(gamingExists, gaming2Exists) {
         listOfNotNull(
-            "p" to "Perf",
-            if (gamingExists) "g" to "Gaming" else null,
-            if (gaming2Exists) "g2" to "Gaming+" else null
+            AppProfiles.Powersave,
+            AppProfiles.Balance,
+            AppProfiles.Performance,
+            AppProfiles.Gaming.takeIf { gamingExists },
+            AppProfiles.Gaming2.takeIf { gaming2Exists }
         )
     }
     val colorScheme = MaterialTheme.colorScheme
@@ -453,21 +468,18 @@ private fun EditAppSheetContent(
         )
         Spacer(modifier = Modifier.height(16.dp))
 
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            modes.forEachIndexed { index, (modeValue, modeLabel) ->
-                SegmentedButton(
-                    selected = selectedMode == modeValue,
-                    onClick = { selectedMode = modeValue; onUpdateMode(config.app.packageName, modeValue) },
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
-                    icon = {
-                        if (selectedMode == modeValue) {
-                            Icon(
-                                imageVector = when (modeValue) { "p" -> Icons.Rounded.RocketLaunch; "g" -> Icons.Rounded.SportsEsports; else -> Icons.Rounded.VideogameAsset },
-                                contentDescription = null, modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                ) { Text(modeLabel) }
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            modes.forEach { profile ->
+                ProfilePill(
+                    profile = profile,
+                    selected = selectedMode == profile.code,
+                    hazeState = hazeState,
+                    onClick = { selectedMode = profile.code; onUpdateMode(config.app.packageName, profile.code) }
+                )
             }
         }
         Spacer(modifier = Modifier.height(32.dp))
@@ -482,6 +494,54 @@ private fun EditAppSheetContent(
             Text("Remove from list")
         }
         Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun ProfilePill(
+    profile: AppProfile,
+    selected: Boolean,
+    hazeState: HazeState,
+    onClick: () -> Unit
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    val accent = profileColor(profile.code)
+    val pillStyle = remember(accent, selected) {
+        HazeStyle(
+            blurRadius = 25.dp,
+            noiseFactor = 0.1f,
+            tints = listOf(HazeTint(accent.copy(alpha = if (selected) 0.3f else 0.12f)))
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .hazeEffect(state = hazeState, style = pillStyle)
+            .background(Color.Transparent)
+            .border(
+                width = 1.dp,
+                color = (if (selected) accent else colorScheme.outlineVariant).copy(alpha = 0.5f),
+                shape = RoundedCornerShape(50)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = profileIcon(profile.code),
+                contentDescription = null,
+                tint = if (selected) accent else colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = profile.label,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = if (selected) accent else colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 

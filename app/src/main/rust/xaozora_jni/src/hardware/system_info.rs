@@ -70,7 +70,7 @@ fn get_ram_info() -> String {
     let meminfo = read_system_file("/proc/meminfo");
     for line in meminfo.lines() {
         if line.starts_with("MemTotal:") {
-            let kb_str: String = line.chars().filter(|c| c.is_digit(10)).collect();
+            let kb_str: String = line.chars().filter(|c| c.is_ascii_digit()).collect();
             if let Ok(kb) = kb_str.parse::<f64>() {
                 let gb = kb / 1024.0 / 1024.0;
                 return format!("{:.1} GB", gb);
@@ -94,8 +94,8 @@ fn get_deep_sleep() -> String {
         libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut ts_mono);
     }
 
-    let elapsed = ts_boot.tv_sec as i64 * 1000 + (ts_boot.tv_nsec / 1_000_000) as i64;
-    let uptime_millis = ts_mono.tv_sec as i64 * 1000 + (ts_mono.tv_nsec / 1_000_000) as i64;
+    let elapsed = ts_boot.tv_sec * 1000 + ts_boot.tv_nsec / 1_000_000;
+    let uptime_millis = ts_mono.tv_sec * 1000 + ts_mono.tv_nsec / 1_000_000;
     let deep_sleep_millis = elapsed.saturating_sub(uptime_millis);
 
     let total_seconds = deep_sleep_millis / 1000;
@@ -251,13 +251,7 @@ pub fn fetch_system_info() -> SystemInfo {
             }
         };
 
-        let mut health_raw = current_capacity / design_capacity_mah as f32 * 100.0;
-        if health_raw > 100.0 {
-            health_raw = 100.0;
-        }
-        if health_raw < 0.0 {
-            health_raw = 0.0;
-        }
+        let health_raw = (current_capacity / design_capacity_mah as f32 * 100.0).clamp(0.0, 100.0);
 
         let health_category = if health_raw >= 80.0 {
             "Good"
@@ -322,8 +316,8 @@ pub fn poll_hardware() -> RealTimeMetrics {
     if let Some(cpu_line) = stat.lines().find(|l| l.starts_with("cpu ")) {
         let parts: Vec<&str> = cpu_line.split_whitespace().collect();
         let mut total = 0u64;
-        for i in 1..parts.len() {
-            total += parts[i].parse::<u64>().unwrap_or(0);
+        for part in parts.iter().skip(1) {
+            total += part.parse::<u64>().unwrap_or(0);
         }
         let idle = if parts.len() > 4 {
             parts[4].parse::<u64>().unwrap_or(0)

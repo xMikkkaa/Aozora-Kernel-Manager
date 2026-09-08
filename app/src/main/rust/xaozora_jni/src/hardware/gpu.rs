@@ -123,22 +123,21 @@ pub extern "system" fn Java_com_xaozora_manager_core_utils_GpuControlUtils_apply
     governor: JString,
     adreno_boost: JString,
 ) {
-    let _ = env
-        .with_env(|env| -> jni::errors::Result<()> {
-            let min_freq = min_freq.try_to_string(env).unwrap();
-            let max_freq = max_freq.try_to_string(env).unwrap();
-            let governor = governor.try_to_string(env).unwrap();
+    env.with_env(|env| -> jni::errors::Result<()> {
+        let min_freq = min_freq.try_to_string(env).unwrap();
+        let max_freq = max_freq.try_to_string(env).unwrap();
+        let governor = governor.try_to_string(env).unwrap();
 
-            let adreno_boost_val: Option<String> = if adreno_boost.is_null() {
-                None
-            } else {
-                Some(adreno_boost.try_to_string(env).unwrap())
-            };
+        let adreno_boost_val: Option<String> = if adreno_boost.is_null() {
+            None
+        } else {
+            Some(adreno_boost.try_to_string(env).unwrap())
+        };
 
-            let adreno_boost_ref = adreno_boost_val.as_deref();
+        let adreno_boost_ref = adreno_boost_val.as_deref();
 
-            apply_gpu_config(&min_freq, &max_freq, &governor, adreno_boost_ref);
-            Ok(())
-        })
-        .resolve::<ThrowRuntimeExAndDefault>();
+        apply_gpu_config(&min_freq, &max_freq, &governor, adreno_boost_ref);
+        Ok(())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>();
 }

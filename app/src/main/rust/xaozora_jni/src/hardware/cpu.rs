@@ -89,7 +89,7 @@ pub extern "system" fn Java_com_xaozora_manager_core_utils_CpuControlUtils_getCl
 ) -> jstring {
     env.with_env(|env| -> jni::errors::Result<jstring> {
         let name = name.try_to_string(env).unwrap();
-        let config = get_cluster_config(cluster_cpu_id as i32, &name);
+        let config = get_cluster_config(cluster_cpu_id, &name);
 
         let json_str = serde_json::to_string(&config).unwrap_or_else(|_| "{}".to_string());
         let output = env.new_string(json_str).unwrap();
@@ -109,14 +109,13 @@ pub extern "system" fn Java_com_xaozora_manager_core_utils_CpuControlUtils_apply
     max_freq: JString,
     governor: JString,
 ) {
-    let _ = env
-        .with_env(|env| -> jni::errors::Result<()> {
-            let min_freq = min_freq.try_to_string(env).unwrap();
-            let max_freq = max_freq.try_to_string(env).unwrap();
-            let governor = governor.try_to_string(env).unwrap();
+    env.with_env(|env| -> jni::errors::Result<()> {
+        let min_freq = min_freq.try_to_string(env).unwrap();
+        let max_freq = max_freq.try_to_string(env).unwrap();
+        let governor = governor.try_to_string(env).unwrap();
 
-            apply_cluster_config(cluster_cpu_id as i32, &min_freq, &max_freq, &governor);
-            Ok(())
-        })
-        .resolve::<ThrowRuntimeExAndDefault>();
+        apply_cluster_config(cluster_cpu_id, &min_freq, &max_freq, &governor);
+        Ok(())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>();
 }

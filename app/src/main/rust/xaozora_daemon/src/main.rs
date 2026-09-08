@@ -59,11 +59,9 @@ fn main() {
             "--enable-autd" => enable_autd = true,
             "--disable-autd" => disable_autd = true,
             "--reset-stats" => reset_stats = true,
-            "--battery-logger" => {
-                if i + 1 < args.len() {
-                    logger_path = Some(args[i + 1].clone());
-                    i += 1;
-                }
+            "--battery-logger" if i + 1 < args.len() => {
+                logger_path = Some(args[i + 1].clone());
+                i += 1;
             }
             _ => {}
         }
@@ -73,13 +71,13 @@ fn main() {
     let pid_path = config::AUTD_DIR.to_owned() + "/xaozora_daemon.pid";
     config::ensure_app_dir();
 
-    if let Ok(existing_pid_str) = fs::read_to_string(&pid_path) {
-        if let Ok(pid) = existing_pid_str.trim().parse::<i32>() {
-            unsafe {
-                if pid != std::process::id() as i32 && libc::kill(pid, 0) == 0 {
-                    libc::kill(pid, 15);
-                    sleep(Duration::from_millis(500));
-                }
+    if let Ok(existing_pid_str) = fs::read_to_string(&pid_path)
+        && let Ok(pid) = existing_pid_str.trim().parse::<i32>()
+    {
+        unsafe {
+            if pid != std::process::id() as i32 && libc::kill(pid, 0) == 0 {
+                libc::kill(pid, 15);
+                sleep(Duration::from_millis(500));
             }
         }
     }
