@@ -144,5 +144,5 @@ jobs:
           appId: ${{ secrets.FIREBASE_APP_ID }}
           serviceCredentialsFile: ${{ runner.temp }}/firebase-sa.json
           file: manager/app/release/app-release.apk
-          groups: internal-testers
+          groups: internal-tester
           releaseNotes: ${{ env.CHANGELOG }}
