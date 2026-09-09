@@ -95,8 +95,7 @@ object NativeDaemonManager {
 
             if (!daemonFile.exists()) return@withLock false
 
-            suCmd("killall -9 $DAEMON_FILENAME; pkill -9 $DAEMON_FILENAME")
-            kotlinx.coroutines.delay(500)
+            killDaemon()
 
             val executablePath = daemonFile.absolutePath
             File(context.filesDir, "battmon").mkdirs()
@@ -133,5 +132,15 @@ object NativeDaemonManager {
         val cmd = "pgrep -x $DAEMON_FILENAME"
         val output = suCmdOut(cmd)
         return output.isNotBlank()
+    }
+
+    fun isAutdArmed(): Boolean {
+        val output = suCmdOut("ps -A | grep '[x]aozora_daemon.*--enable-autd'")
+        return output.isNotBlank()
+    }
+
+    suspend fun killDaemon() {
+        suCmd("killall -9 $DAEMON_FILENAME; pkill -9 $DAEMON_FILENAME")
+        kotlinx.coroutines.delay(500)
     }
 }
