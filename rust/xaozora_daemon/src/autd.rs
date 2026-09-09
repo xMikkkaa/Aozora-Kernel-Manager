@@ -49,6 +49,7 @@ pub fn run_autd() {
     process::thread_opt::init_cpuset();
 
     let mut last_mode = String::with_capacity(64);
+    let mut last_game = String::with_capacity(128);
     let mut user_base = String::with_capacity(64);
     user_base.push_str("balance");
     let mut msg_buffer = String::with_capacity(300);
@@ -176,15 +177,21 @@ pub fn run_autd() {
         }
 
         if let Some((current_game, chosen_mode, game_pid)) = game_check {
-            if last_mode != chosen_mode {
+            if last_mode != chosen_mode || last_game != current_game {
                 utils::cmd::apply_mode(&chosen_mode);
 
                 msg_buffer.clear();
-                let _ = write!(msg_buffer, "Game: {} (Mode: {})", current_game, chosen_mode);
+                let _ = write!(
+                    msg_buffer,
+                    "Profile: {} (Mode: {})",
+                    current_game, chosen_mode
+                );
                 utils::cmd::send_toast(&msg_buffer);
 
                 last_mode.clear();
                 last_mode.push_str(&chosen_mode);
+                last_game.clear();
+                last_game.push_str(&current_game);
                 idle_cycles = 0;
             }
 
@@ -222,6 +229,7 @@ pub fn run_autd() {
                 }
             }
         } else if bat_level <= 20 || ps_active {
+            last_game.clear();
             if last_mode != "powersave" {
                 utils::cmd::apply_mode("powersave");
                 utils::cmd::send_toast("Mode: Powersave (Battery Low/System Saver)");
@@ -240,6 +248,7 @@ pub fn run_autd() {
                 sched_lib_active = false;
             }
         } else {
+            last_game.clear();
             if last_mode != user_base {
                 utils::cmd::apply_mode(&user_base);
 
