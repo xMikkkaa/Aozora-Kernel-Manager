@@ -66,6 +66,9 @@ import com.xaozora.manager.R
 import com.xaozora.manager.core.shell.RootShellHelper
 import com.xaozora.manager.ui.components.GlassCard
 import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -189,10 +192,10 @@ fun PreparationScreen(
         modifier = modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
-                    .weight(1f)
+                    .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -215,9 +218,13 @@ fun PreparationScreen(
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(100.dp))
+                Spacer(modifier = Modifier.navigationBarsPadding())
             }
 
-            BottomBar(
+            ConfirmButton(
+                modifier = Modifier.align(Alignment.BottomCenter),
+                hazeState = hazeState,
                 rootStatus = rootStatus,
                 onContinue = onContinue,
                 onExit = onExit
@@ -366,81 +373,94 @@ private fun TrailingIndicator(
 }
 
 @Composable
-private fun BottomBar(
+private fun ConfirmButton(
+    modifier: Modifier = Modifier,
+    hazeState: HazeState,
     rootStatus: PreparationStatus,
     onContinue: () -> Unit,
     onExit: () -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
-
-    val primary = rootStatus == PreparationStatus.GRANTED
-    val containerColor = when {
-        rootStatus == PreparationStatus.CHECKING -> colorScheme.surfaceContainerHighest.copy(alpha = 0.3f)
-        primary -> colorScheme.primaryContainer.copy(alpha = 0.25f)
-        else -> colorScheme.errorContainer.copy(alpha = 0.25f)
+    val surfaceContainer = colorScheme.surfaceContainer
+    val glassStyle = remember(surfaceContainer) {
+        HazeStyle(
+            blurRadius = 25.dp,
+            noiseFactor = 0.1f,
+            tints = listOf(HazeTint(surfaceContainer.copy(alpha = 0.25f)))
+        )
     }
+
+    val isGranted = rootStatus == PreparationStatus.GRANTED
+    val isChecking = rootStatus == PreparationStatus.CHECKING
     val borderColor = when {
-        rootStatus == PreparationStatus.CHECKING -> colorScheme.outlineVariant.copy(alpha = 0.4f)
-        primary -> colorScheme.primary.copy(alpha = 0.4f)
-        else -> colorScheme.error.copy(alpha = 0.4f)
+        isChecking -> colorScheme.outlineVariant.copy(alpha = 0.5f)
+        isGranted -> colorScheme.primary.copy(alpha = 0.5f)
+        else -> colorScheme.error.copy(alpha = 0.5f)
     }
     val contentColor = when {
-        rootStatus == PreparationStatus.CHECKING -> colorScheme.onSurfaceVariant
-        primary -> colorScheme.onPrimaryContainer
+        isChecking -> colorScheme.onSurfaceVariant
+        isGranted -> colorScheme.primary
         else -> colorScheme.error
     }
-    val buttonIcon = if (primary) Icons.Rounded.CheckCircle else Icons.Rounded.Close
     val label = when {
-        rootStatus == PreparationStatus.CHECKING -> "Checking..."
-        primary -> "OK"
+        isChecking -> "Checking..."
+        isGranted -> "OK"
         else -> "Exit"
     }
+    val buttonIcon = if (isGranted) Icons.Rounded.CheckCircle else Icons.Rounded.Close
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
             .navigationBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 20.dp),
+            .padding(start = 32.dp, end = 32.dp, bottom = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        if (!primary && rootStatus != PreparationStatus.CHECKING) {
+        if (!isGranted && !isChecking) {
             Text(
                 text = "Root access is required to continue.",
                 style = MaterialTheme.typography.bodySmall.copy(color = colorScheme.error),
                 textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
         }
 
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(54.dp)
+                .height(64.dp)
                 .clip(CircleShape)
-                .background(containerColor)
-                .border(width = 1.dp, color = borderColor, shape = CircleShape)
-                .clickable(enabled = rootStatus != PreparationStatus.CHECKING) {
-                    if (primary) onContinue() else onExit()
+                .hazeEffect(state = hazeState, style = glassStyle)
+                .background(
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Color.Transparent
+                    else surfaceContainer
+                )
+                .border(width = 1.2.dp, color = borderColor, shape = CircleShape)
+                .clickable(enabled = !isChecking) {
+                    if (isGranted) onContinue() else onExit()
                 },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+            contentAlignment = Alignment.Center
         ) {
-            if (rootStatus != PreparationStatus.CHECKING) {
-                Icon(
-                    imageVector = buttonIcon,
-                    contentDescription = null,
-                    tint = contentColor,
-                    modifier = Modifier.size(20.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                if (!isChecking) {
+                    Icon(
+                        imageVector = buttonIcon,
+                        contentDescription = null,
+                        tint = contentColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                }
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = contentColor
+                    )
                 )
-                Spacer(modifier = Modifier.width(10.dp))
             }
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                    color = contentColor
-                )
-            )
         }
     }
 }
