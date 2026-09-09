@@ -81,6 +81,7 @@ jobs:
           name: Android-Lint-Report
           path: manager/app/build/reports/lint-results-debug.html
           retention-days: 7
+          if-no-files-found: ignore
 
   rust-lint-and-test:
     name: Rust Fmt, Clippy & Tests

@@ -195,9 +195,22 @@ class MainActivity : ComponentActivity() {
                 AozoraKernelManagerTheme(darkTheme = isDark, dynamicColor = true) {
                     var showSplash by remember { mutableStateOf(!navigateToTuning) }
 
+                    val preparationPrefs = remember { context.getSharedPreferences("aozora_prefs", Context.MODE_PRIVATE) }
+                    var showPreparation by remember { mutableStateOf(!preparationPrefs.getBoolean("preparation_complete", false)) }
+                    val preparationHazeState = remember { HazeState() }
+
                     if (showSplash) {
                         com.xaozora.manager.ui.components.SplashScreen(
                             onSplashFinished = { showSplash = false }
+                        )
+                    } else if (showPreparation) {
+                        com.xaozora.manager.ui.screens.preparation.PreparationScreen(
+                            hazeState = preparationHazeState,
+                            onContinue = {
+                                preparationPrefs.edit().putBoolean("preparation_complete", true).apply()
+                                showPreparation = false
+                            },
+                            onExit = { finishAffinity() }
                         )
                     } else {
                     val screens = getAvailableScreens(isAutdAvailable, isModuleInstalled)
