@@ -85,7 +85,7 @@ jobs:
       - name: Generate SBOM (APK)
         uses: anchore/sbom-action@v0
         with:
-          path: manager/app/release/app-release.apk
+          path: manager/app/release
           format: spdx-json
           output-file: sbom-apk.spdx.json
           upload-artifact: false
