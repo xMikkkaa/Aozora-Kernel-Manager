@@ -135,8 +135,8 @@ object NativeDaemonManager {
     }
 
     fun isAutdArmed(): Boolean {
-        val output = suCmdOut("ps -A | grep '[x]aozora_daemon.*--enable-autd'")
-        return output.isNotBlank()
+        val output = suCmdOut("for p in $(pgrep -x xaozora_daemon); do cat /proc/\$p/cmdline; echo; done")
+        return output.contains("--enable-autd")
     }
 
     suspend fun killDaemon() {
