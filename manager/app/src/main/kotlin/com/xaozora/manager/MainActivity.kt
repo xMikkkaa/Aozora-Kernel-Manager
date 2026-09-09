@@ -204,20 +204,14 @@ class MainActivity : ComponentActivity() {
                             onSplashFinished = { showSplash = false }
                         )
                     } else if (showPreparation) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .hazeSource(preparationHazeState)
-                        ) {
-                            com.xaozora.manager.ui.screens.preparation.PreparationScreen(
-                                hazeState = preparationHazeState,
-                                onContinue = {
-                                    preparationPrefs.edit().putBoolean("preparation_complete", true).apply()
-                                    showPreparation = false
-                                },
-                                onExit = { finishAffinity() }
-                            )
-                        }
+                        com.xaozora.manager.ui.screens.preparation.PreparationScreen(
+                            hazeState = preparationHazeState,
+                            onContinue = {
+                                preparationPrefs.edit().putBoolean("preparation_complete", true).apply()
+                                showPreparation = false
+                            },
+                            onExit = { finishAffinity() }
+                        )
                     } else {
                     val screens = getAvailableScreens(isAutdAvailable, isModuleInstalled)
                     val pagerState = rememberPagerState(pageCount = { screens.size })

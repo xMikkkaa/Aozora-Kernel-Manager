@@ -69,6 +69,7 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -188,11 +189,13 @@ fun PreparationScreen(
         )
     }
 
-    Surface(
-        modifier = modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .hazeSource(state = hazeState),
+            color = MaterialTheme.colorScheme.background
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -221,15 +224,15 @@ fun PreparationScreen(
                 Spacer(modifier = Modifier.height(100.dp))
                 Spacer(modifier = Modifier.navigationBarsPadding())
             }
-
-            ConfirmButton(
-                modifier = Modifier.align(Alignment.BottomCenter),
-                hazeState = hazeState,
-                rootStatus = rootStatus,
-                onContinue = onContinue,
-                onExit = onExit
-            )
         }
+
+        ConfirmButton(
+            modifier = Modifier.align(Alignment.BottomCenter),
+            hazeState = hazeState,
+            rootStatus = rootStatus,
+            onContinue = onContinue,
+            onExit = onExit
+        )
     }
 }
 
