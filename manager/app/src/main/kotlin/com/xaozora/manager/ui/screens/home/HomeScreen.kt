@@ -163,7 +163,7 @@ fun HomeScreen(
     LaunchedEffect(lifecycleState) {
         if (lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
             while (true) {
-                val running = withContext(Dispatchers.IO) { RootShellHelper.executeCmd("ps -A | grep 'xaozora_daemon.*--enable-autd' > /dev/null") }
+                val running = withContext(Dispatchers.IO) { com.xaozora.manager.core.utils.NativeDaemonManager.isAutdArmed() }
                 isDaemonRunning = running
                 delay(3000)
             }

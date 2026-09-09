@@ -74,6 +74,7 @@ fun SettingsScreen(
     var bannerBias by remember { mutableStateOf(prefs.getFloat("banner_bias", 0.5f)) }
     var showAbout by remember { mutableStateOf(false) }
     var awakeMethod by remember { mutableStateOf("") }
+    var autdArmed by remember { mutableStateOf<Boolean?>(null) }
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -122,6 +123,8 @@ fun SettingsScreen(
                         if (content.isNotBlank()) {
                             withContext(Dispatchers.Main) { awakeMethod = content }
                         }
+                        val armed = NativeDaemonManager.isAutdArmed()
+                        withContext(Dispatchers.Main) { autdArmed = armed }
                     } catch (e: Exception) {
                     }
                 }
@@ -129,6 +132,7 @@ fun SettingsScreen(
             }
         } else {
             awakeMethod = ""
+            autdArmed = null
         }
     }
 
@@ -163,7 +167,12 @@ fun SettingsScreen(
 
                 SettingsToggleCard(
                     title = "Aozora Automation Daemon",
-                    subtitle = "Enable automatic kernel tuning",
+                    subtitle = when {
+                        !autdEnabled -> "Enable automatic kernel tuning"
+                        autdArmed == null -> "Checking daemon status..."
+                        autdArmed == true -> "AUTD active"
+                        else -> "Daemon not running — toggle to restart"
+                    },
                     icon = Icons.Rounded.AutoMode,
                     checked = autdEnabled,
                     hazeState = hazeState,

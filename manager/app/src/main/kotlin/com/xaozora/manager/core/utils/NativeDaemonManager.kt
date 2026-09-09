@@ -9,6 +9,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.io.InputStream
+import java.security.MessageDigest
 
 object NativeDaemonManager {
     private const val DAEMON_FILENAME = "xaozora_daemon"
@@ -33,6 +35,32 @@ object NativeDaemonManager {
         }
     }
 
+    private fun sha256(input: InputStream): ByteArray? {
+        return try {
+            val digest = MessageDigest.getInstance("SHA-256")
+            val buffer = ByteArray(8192)
+            while (true) {
+                val read = input.read(buffer)
+                if (read <= 0) break
+                digest.update(buffer, 0, read)
+            }
+            digest.digest()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun isBundledBinaryFresh(context: Context, daemonFile: File): Boolean {
+        if (!daemonFile.exists()) return false
+        return try {
+            val bundled = context.assets.open(DAEMON_FILENAME).use { sha256(it) } ?: return false
+            val current = daemonFile.inputStream().use { sha256(it) } ?: return false
+            bundled.contentEquals(current)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     suspend fun extractAndStartDaemon(context: Context, enableAutd: Boolean? = null) = withContext(Dispatchers.IO) {
         daemonMutex.withLock {
             val daemonFile = File(context.filesDir, DAEMON_FILENAME)
@@ -40,31 +68,34 @@ object NativeDaemonManager {
             val prefs = context.getSharedPreferences("aozora_prefs", Context.MODE_PRIVATE)
             val shouldEnableAutd = enableAutd ?: prefs.getBoolean("autd_enabled", true)
 
-            if (enableAutd == null && isDaemonRunning()) {
-                Log.d(TAG, "Daemon is already running, skipping startup.")
+            val binaryFresh = isBundledBinaryFresh(context, daemonFile)
+
+            if (enableAutd == null && binaryFresh && isDaemonRunning()) {
+                Log.d(TAG, "Daemon is already running with current binary, skipping startup.")
                 return@withLock true
             }
 
             Log.d(TAG, "Starting daemon. enableAutd: $shouldEnableAutd")
 
             try {
-                val tmpFile = File(context.filesDir, "${DAEMON_FILENAME}_tmp")
-                context.assets.open(DAEMON_FILENAME).use { input ->
-                    FileOutputStream(tmpFile).use { output ->
-                        input.copyTo(output)
+                if (!binaryFresh) {
+                    val tmpFile = File(context.filesDir, "${DAEMON_FILENAME}_tmp")
+                    context.assets.open(DAEMON_FILENAME).use { input ->
+                        FileOutputStream(tmpFile).use { output ->
+                            input.copyTo(output)
+                        }
                     }
+
+                    suCmd("rm -f ${daemonFile.absolutePath}; mv ${tmpFile.absolutePath} ${daemonFile.absolutePath}")
                 }
-                
-                suCmd("killall -9 $DAEMON_FILENAME; pkill -9 $DAEMON_FILENAME")
-                kotlinx.coroutines.delay(500)
-                
-                suCmd("rm -f ${daemonFile.absolutePath}; mv ${tmpFile.absolutePath} ${daemonFile.absolutePath}")
             } catch (e: Exception) {
                 Log.e(TAG, "Extraction failed", e)
                 return@withLock false
             }
 
             if (!daemonFile.exists()) return@withLock false
+
+            killDaemon()
 
             val executablePath = daemonFile.absolutePath
             File(context.filesDir, "battmon").mkdirs()
@@ -101,5 +132,15 @@ object NativeDaemonManager {
         val cmd = "pgrep -x $DAEMON_FILENAME"
         val output = suCmdOut(cmd)
         return output.isNotBlank()
+    }
+
+    fun isAutdArmed(): Boolean {
+        val output = suCmdOut("for p in $(pgrep -x xaozora_daemon); do cat /proc/\$p/cmdline; echo; done")
+        return output.contains("--enable-autd")
+    }
+
+    suspend fun killDaemon() {
+        suCmd("killall -9 $DAEMON_FILENAME; pkill -9 $DAEMON_FILENAME")
+        kotlinx.coroutines.delay(500)
     }
 }
