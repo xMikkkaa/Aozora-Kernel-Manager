@@ -15,4 +15,5 @@
  */
 
 pub mod game_det;
+pub mod hydra_feed;
 pub mod thread_opt;
