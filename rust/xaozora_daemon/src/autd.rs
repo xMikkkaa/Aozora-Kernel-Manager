@@ -199,12 +199,13 @@ pub fn run_autd() {
                 if is_optimize_allowed && process::game_det::is_game_profile(&chosen_mode) {
                     if hydra_enabled {
                         if last_hydra_pid != game_pid {
-                            let _ = fs::write(config::KERNEL_HYDRA_PID_PATH, game_pid.to_string());
+                            process::hydra_feed::feed_hydra_patterns(game_pid);
                             last_hydra_pid = game_pid;
                         }
                     } else {
                         if last_hydra_pid != 0 {
                             let _ = fs::write(config::KERNEL_HYDRA_PID_PATH, "0");
+                            process::hydra_feed::clear_hydra_patterns();
                             last_hydra_pid = 0;
                         }
                         process::thread_opt::optimize_game_threads(game_pid);
@@ -219,6 +220,7 @@ pub fn run_autd() {
                 } else {
                     if last_hydra_pid != 0 {
                         let _ = fs::write(config::KERNEL_HYDRA_PID_PATH, "0");
+                        process::hydra_feed::clear_hydra_patterns();
                         last_hydra_pid = 0;
                     }
                     if sched_lib_supported && sched_lib_active {
@@ -240,6 +242,7 @@ pub fn run_autd() {
             }
             if hydra_enabled && last_hydra_pid != 0 {
                 let _ = fs::write(config::KERNEL_HYDRA_PID_PATH, "0");
+                process::hydra_feed::clear_hydra_patterns();
                 last_hydra_pid = 0;
             }
             if sched_lib_supported && sched_lib_active {
@@ -262,6 +265,7 @@ pub fn run_autd() {
             }
             if hydra_enabled && last_hydra_pid != 0 {
                 let _ = fs::write(config::KERNEL_HYDRA_PID_PATH, "0");
+                process::hydra_feed::clear_hydra_patterns();
                 last_hydra_pid = 0;
             }
             if sched_lib_supported && sched_lib_active {
