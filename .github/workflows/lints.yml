@@ -110,3 +110,10 @@ jobs:
           cargo fmt -- --check
           cargo ndk -t arm64-v8a clippy -- -D warnings
           cargo test
+
+      - name: Check Rust Rupture
+        working-directory: rust/xaozora_rupture
+        run: |
+          cargo fmt -- --check
+          cargo ndk -t arm64-v8a clippy -- -D warnings
+          cargo test
