@@ -3,7 +3,22 @@ use jni::sys::jstring;
 use jni::{errors::ThrowRuntimeExAndDefault, EnvUnowned};
 use serde::{Deserialize, Serialize};
 
-use crate::utils::shell::{execute_cmd, read_system_file};
+use crate::utils::shell::{execute_cmd, execute_cmd_and_get_output, read_system_file};
+
+pub fn list_cpu_policies() -> Vec<u32> {
+    let out = execute_cmd_and_get_output(
+        "ls /sys/devices/system/cpu/cpufreq 2>/dev/null | grep '^policy' | sed 's/policy//' | sort -n",
+    );
+    let mut policies: Vec<u32> = out
+        .split_whitespace()
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    if policies.is_empty() {
+        policies.push(0);
+    }
+    policies.sort_unstable();
+    policies
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct CpuClusterConfig {
@@ -17,7 +32,7 @@ pub struct CpuClusterConfig {
 }
 
 pub fn get_cluster_config(cluster_cpu_id: i32, name: &str) -> CpuClusterConfig {
-    let base_path = format!("/sys/devices/system/cpu/cpu{}/cpufreq", cluster_cpu_id);
+    let base_path = format!("/sys/devices/system/cpu/cpufreq/policy{}", cluster_cpu_id);
 
     let available_freqs_str =
         read_system_file(&format!("{}/scaling_available_frequencies", base_path));
@@ -60,7 +75,7 @@ pub fn get_cluster_config(cluster_cpu_id: i32, name: &str) -> CpuClusterConfig {
 }
 
 pub fn apply_cluster_config(cluster_cpu_id: i32, min_freq: &str, max_freq: &str, governor: &str) {
-    let base_path = format!("/sys/devices/system/cpu/cpu{}/cpufreq", cluster_cpu_id);
+    let base_path = format!("/sys/devices/system/cpu/cpufreq/policy{}", cluster_cpu_id);
 
     let cmd = format!(
         "chmod 644 {base}/scaling_min_freq {base}/scaling_max_freq {base}/scaling_governor; \
@@ -118,4 +133,20 @@ pub extern "system" fn Java_com_xaozora_manager_core_utils_CpuControlUtils_apply
         Ok(())
     })
     .resolve::<ThrowRuntimeExAndDefault>();
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_xaozora_manager_core_utils_CpuControlUtils_getCpuPoliciesJson<
+    'local,
+>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass,
+) -> jstring {
+    env.with_env(|env| -> jni::errors::Result<jstring> {
+        let policies = list_cpu_policies();
+        let json_str = serde_json::to_string(&policies).unwrap_or_else(|_| "[]".to_string());
+        let output = env.new_string(json_str).unwrap();
+        Ok(output.into_raw())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
 }
