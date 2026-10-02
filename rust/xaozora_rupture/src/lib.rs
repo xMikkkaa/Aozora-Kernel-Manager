@@ -43,6 +43,25 @@ pub fn write_info_json() {
     let _ = std::fs::write(RUPTURE_INFO_PATH, info.to_string());
 }
 
+fn cleanup_mode_ops() {
+    let _ = std::fs::write("/proc/sys/vm/drop_caches", "3");
+    shell(
+        "cmd power set-fixed-performance-mode-enabled false; \
+         cmd looper_stats disable; \
+         cmd looper_stats reset; \
+         dumpsys binder_calls_stats --reset; \
+         dumpsys binder_calls_stats --disable; \
+         dumpsys binder_calls_stats --disable-detailed-tracking; \
+         dumpsys procstats --clear; \
+         dumpsys procstats --stop-testing; \
+         cmd display ab-logging-disable; \
+         cmd display dwb-logging-disable; \
+         cmd display dmd-logging-disable; \
+         logcat -G 64K; \
+         logcat -c",
+    );
+}
+
 pub fn apply_powersave() {
     let soc = detect_soc();
     let freqs = compute_cpu_freqs(101, 3);
@@ -57,6 +76,7 @@ pub fn apply_powersave() {
     set_settings("low_priority", "1");
     set_cmd_power_adaptive(true);
     soc_apply(2, soc);
+    cleanup_mode_ops();
 }
 
 pub fn apply_balance() {
@@ -73,6 +93,7 @@ pub fn apply_balance() {
     set_settings("low_priority", "0");
     set_cmd_power_adaptive(false);
     soc_apply(3, soc);
+    cleanup_mode_ops();
 }
 
 pub fn apply_performance() {
@@ -89,6 +110,7 @@ pub fn apply_performance() {
     set_settings("low_priority", "0");
     set_cmd_power_adaptive(false);
     soc_apply(4, soc);
+    cleanup_mode_ops();
 }
 
 pub fn kill_all() {
