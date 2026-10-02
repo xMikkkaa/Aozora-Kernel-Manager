@@ -156,6 +156,17 @@ pub fn set_gpu_freq(min: u64, max: u64) {
     }
 }
 
+pub fn get_gpu_freq_table() -> Vec<u64> {
+    fs::read_to_string("/sys/kernel/gpu/gpu_freq_table")
+        .ok()
+        .map(|c| {
+            c.split_whitespace()
+                .filter_map(|s| s.parse().ok())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 pub fn tune_vm_io(vfs_cache_pressure: u64, page_cluster: u64) {
     if vfs_cache_pressure > 0 {
         setvalue(
