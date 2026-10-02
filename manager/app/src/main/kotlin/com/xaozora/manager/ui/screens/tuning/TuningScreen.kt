@@ -319,7 +319,7 @@ fun TuningScreen(
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = if (moduleVersion.isBlank()) "Version: Unknown" else "Version: $moduleVersion",
+                                        text = if (moduleVersion.isNullOrBlank()) "Version: Unknown" else "Version: $moduleVersion",
                                         style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     )
                                 }
