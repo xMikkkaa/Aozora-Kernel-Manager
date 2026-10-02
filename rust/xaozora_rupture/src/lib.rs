@@ -19,8 +19,9 @@ pub mod primitives;
 pub mod soc;
 
 use primitives::{
-    apply_cpu_freqs, compute_cpu_freqs, set_cmd_power_adaptive, set_cpu_gov, set_hwui_target,
-    set_settings, shell, shell_output, tune_block_io, tune_block_sched, tune_net, tune_vm_io,
+    apply_cpu_freqs, compute_cpu_freqs, get_gpu_freq_table, set_cmd_power_adaptive, set_cpu_gov,
+    set_gpu_freq, set_hwui_target, set_settings, shell, tune_block_io, tune_block_sched, tune_net,
+    tune_vm_io,
 };
 use soc::{detect_soc, soc_apply};
 
@@ -43,6 +44,25 @@ pub fn write_info_json() {
     let _ = std::fs::write(RUPTURE_INFO_PATH, info.to_string());
 }
 
+fn cleanup_mode_ops() {
+    let _ = std::fs::write("/proc/sys/vm/drop_caches", "3");
+    shell(
+        "cmd power set-fixed-performance-mode-enabled false; \
+         cmd looper_stats disable; \
+         cmd looper_stats reset; \
+         dumpsys binder_calls_stats --reset; \
+         dumpsys binder_calls_stats --disable; \
+         dumpsys binder_calls_stats --disable-detailed-tracking; \
+         dumpsys procstats --clear; \
+         dumpsys procstats --stop-testing; \
+         cmd display ab-logging-disable; \
+         cmd display dwb-logging-disable; \
+         cmd display dmd-logging-disable; \
+         logcat -G 64K; \
+         logcat -c",
+    );
+}
+
 pub fn apply_powersave() {
     let soc = detect_soc();
     let freqs = compute_cpu_freqs(101, 3);
@@ -57,6 +77,7 @@ pub fn apply_powersave() {
     set_settings("low_priority", "1");
     set_cmd_power_adaptive(true);
     soc_apply(2, soc);
+    cleanup_mode_ops();
 }
 
 pub fn apply_balance() {
@@ -73,6 +94,7 @@ pub fn apply_balance() {
     set_settings("low_priority", "0");
     set_cmd_power_adaptive(false);
     soc_apply(3, soc);
+    cleanup_mode_ops();
 }
 
 pub fn apply_performance() {
@@ -89,30 +111,57 @@ pub fn apply_performance() {
     set_settings("low_priority", "0");
     set_cmd_power_adaptive(false);
     soc_apply(4, soc);
-}
-
-pub fn kill_all() {
-    shell("cmd activity kill-all");
-    let packages = shell_output("pm list packages -3 | cut -f 2 -d ':' | tr -d '\\r'");
-    for pkg in packages.lines() {
-        let pkg = pkg.trim();
-        if pkg.is_empty() {
-            continue;
-        }
-        shell(&format!("am force-stop {} &", pkg));
-    }
-    shell("wait");
-    shell("pm trim-caches 100G");
-    let _ = std::fs::write("/proc/sys/vm/drop_caches", "3");
+    cleanup_mode_ops();
 }
 
 pub fn apply_gaming() {
-    apply_performance();
-    kill_all();
+    let soc = detect_soc();
+    let freqs = compute_cpu_freqs(2, 100);
+    apply_cpu_freqs(&freqs);
+    set_cpu_gov("schedutil");
+    tune_block_io(1, 1, 128, 128);
+    tune_net(0, 2, 1, 1);
+    tune_vm_io(120, 3);
+    tune_block_sched("none", 1);
+    set_hwui_target(55);
+    set_settings("high_priority", "1");
+    set_settings("low_priority", "0");
+    set_cmd_power_adaptive(false);
+
+    let gpu_freqs = get_gpu_freq_table();
+    if gpu_freqs.len() >= 2 {
+        let mut sorted = gpu_freqs;
+        sorted.sort_unstable();
+        let second_highest = sorted[sorted.len() - 2];
+        set_gpu_freq(0, second_highest);
+    }
+
+    soc_apply(3, soc);
+    cleanup_mode_ops();
 }
 
 pub fn apply_gaming2() {
-    apply_performance();
+    let soc = detect_soc();
+    let freqs = compute_cpu_freqs(100, 100);
+    apply_cpu_freqs(&freqs);
+    set_cpu_gov("schedutil");
+    tune_block_io(0, 0, 32, 32);
+    tune_net(1, 1, 3, 0);
+    tune_vm_io(80, 0);
+    tune_block_sched("none", 1);
+    set_hwui_target(80);
+    set_settings("high_priority", "1");
+    set_settings("low_priority", "0");
+    set_cmd_power_adaptive(false);
+
+    let gpu_freqs = get_gpu_freq_table();
+    if !gpu_freqs.is_empty() {
+        let highest = gpu_freqs.iter().max().unwrap();
+        set_gpu_freq(0, *highest);
+    }
+
+    soc_apply(4, soc);
+    cleanup_mode_ops();
 }
 
 pub fn cache_clean() {
