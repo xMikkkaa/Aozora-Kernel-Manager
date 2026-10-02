@@ -1,4 +1,4 @@
-use jni::objects::{JClass, JString};
+use jni::objects::JClass;
 use jni::sys::jstring;
 use jni::{errors::ThrowRuntimeExAndDefault, EnvUnowned};
 use serde::Serialize;
