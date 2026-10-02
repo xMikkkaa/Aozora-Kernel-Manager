@@ -122,9 +122,10 @@ fun TuningScreen(
     var editingProfile by remember { mutableStateOf<TuningProfile?>(null) }
     var editingProfileContent by remember { mutableStateOf("") }
     var moduleBasePath by remember { mutableStateOf<String?>(null) }
+    var isBuiltInTuning by remember { mutableStateOf(false) }
 
     LaunchedEffect(onDevModeClickProvider, isDeveloperMode, moduleName) {
-        if (moduleName != null) {
+        if (moduleName != null && !isBuiltInTuning) {
             onDevModeClickProvider?.invoke({
                 if (isDeveloperMode) {
                     isDeveloperMode = false
@@ -195,11 +196,36 @@ fun TuningScreen(
                 }
                 moduleName = mName
                 moduleVersion = mVersion
+                isBuiltInTuning = false
+            } else {
+                val ruptureInfoPath = "${context.filesDir.path}/autd/rupture_info.json"
+                val ruptureInfoJson = try {
+                    java.io.File(ruptureInfoPath).readText()
+                } catch (e: Exception) { "" }
+                var mName = "Aozora-Rupture"
+                var mVersion = ""
+                if (ruptureInfoJson.isNotBlank()) {
+                    try {
+                        val json = org.json.JSONObject(ruptureInfoJson)
+                        mName = json.optString("name", "Aozora-Rupture")
+                        mVersion = json.optString("version", "")
+                    } catch (e: Exception) {}
+                }
+                moduleName = mName
+                moduleVersion = mVersion
+                isBuiltInTuning = true
+                moduleBasePath = null
             }
 
-            profiles.forEach { profile ->
-                profileAvailability[profile.id] =
-                    RootShellHelper.checkFileExists("/system/bin/${profile.id}")
+            if (isBuiltInTuning) {
+                profiles.forEach { profile ->
+                    profileAvailability[profile.id] = true
+                }
+            } else {
+                profiles.forEach { profile ->
+                    profileAvailability[profile.id] =
+                        RootShellHelper.checkFileExists("/system/bin/${profile.id}")
+                }
             }
         }
         isLoading = false
@@ -226,9 +252,7 @@ fun TuningScreen(
         }
     }
 
-    val visibleProfiles = profiles.filter {
-        if (it.id == "gaming" || it.id == "gaming2") profileAvailability[it.id] == true else true
-    }
+    val visibleProfiles = profiles
 
     Surface(
         modifier = modifier.fillMaxSize(),
@@ -289,7 +313,7 @@ fun TuningScreen(
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = "Version: $moduleVersion",
+                                        text = if (moduleVersion.isNullOrBlank()) "Version: Unknown" else "Version: $moduleVersion",
                                         style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     )
                                 }
@@ -409,7 +433,7 @@ fun TuningScreen(
                         )
                         .clip(RoundedCornerShape(28.dp))
                         .clickable(enabled = isAvailable && processingProfile == null) {
-                            if (isDeveloperMode && profile.id != "cachecleaner") {
+                            if (isDeveloperMode && !isBuiltInTuning && profile.id != "cachecleaner") {
                                 moduleBasePath?.let { basePath ->
                                     scope.launch(Dispatchers.IO) {
                                         val content = RootShellHelper.executeCmdAndGetOutput("cat $basePath/${profile.id}")
@@ -422,7 +446,11 @@ fun TuningScreen(
                                     processingProfile = profile.id
                                     try {
                                         delay(600)
-                                        RootShellHelper.executeCmd("/system/bin/cachecleaner")
+                                        if (isBuiltInTuning) {
+                                            RootShellHelper.executeCmd("${context.filesDir.path}/xaozora_rupture/cachecleaner")
+                                        } else {
+                                            RootShellHelper.executeCmd("/system/bin/cachecleaner")
+                                        }
                                     } catch (e: Exception) {} finally {
                                         processingProfile = null
                                     }
@@ -432,13 +460,26 @@ fun TuningScreen(
                                 scope.launch(Dispatchers.IO) {
                                     val autdDir = "${context.filesDir.absolutePath}/autd"
                                     val writeCmd = "rm -f $autdDir/autd_base_mode; echo -n '${profile.id}' > $autdDir/autd_base_mode"
-                                    
+
                                     if (RootShellHelper.executeCmd(writeCmd)) {
                                         activeProfileId = profile.id
                                         scope.launch { snackbarHostState.showSnackbar("Profile ${profile.name} applied") }
                                     } else {
                                         scope.launch { snackbarHostState.showSnackbar("Failed to write profile via root shell") }
                                     }
+                                }
+                            } else if (isBuiltInTuning) {
+                                scope.launch(Dispatchers.IO) {
+                                    processingProfile = profile.id
+                                    try {
+                                        delay(600)
+                                        RootShellHelper.executeCmd("${context.filesDir.path}/xaozora_rupture/${profile.id}")
+                                        activeProfileId = profile.id
+                                        prefs.edit().putString("manual_active_profile", profile.id).apply()
+                                    } catch (e: Exception) {} finally {
+                                        processingProfile = null
+                                    }
+                                    scope.launch { snackbarHostState.showSnackbar("Profile ${profile.name} applied") }
                                 }
                             } else {
                                 scope.launch(Dispatchers.IO) {
