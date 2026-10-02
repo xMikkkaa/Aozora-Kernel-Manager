@@ -273,16 +273,6 @@ fn snapdragon_apply(mode: u8) {
             }
         }
     }
-
-    if mode == 4 {
-        setvalue("performance", &format!("{}/devfreq/governor", kgsl));
-    } else if mode == 3 {
-        setvalue("simple_ondemand", &format!("{}/devfreq/governor", kgsl));
-    } else if mode == 2 {
-        setvalue("powersave", &format!("{}/devfreq/governor", kgsl));
-    } else {
-        setvalue("msm-adreno-tz", &format!("{}/devfreq/governor", kgsl));
-    }
 }
 
 fn exynos_apply(mode: u8) {
@@ -293,36 +283,6 @@ fn exynos_apply(mode: u8) {
             "coarse_demand"
         };
         setvalue(policy, &format!("{}/power_policy", mali_dir));
-    }
-
-    let gpu_avail = "/sys/kernel/gpu/gpu_available_frequencies";
-    if let Ok(content) = fs::read_to_string(gpu_avail) {
-        let freqs: Vec<u64> = content
-            .split_whitespace()
-            .filter_map(|s| s.parse().ok())
-            .collect();
-        if !freqs.is_empty() {
-            let max_f = freqs.iter().max().unwrap();
-            let min_f = freqs.iter().min().unwrap();
-            let mid_f = freqs[freqs.len() / 2];
-            let (max_val, min_val) = if mode == 4 {
-                (*max_f, *max_f)
-            } else if mode == 3 {
-                (*max_f, mid_f)
-            } else {
-                (*max_f, *min_f)
-            };
-            setvalue(&max_val.to_string(), "/sys/kernel/gpu/gpu_max_clock");
-            setvalue(&min_val.to_string(), "/sys/kernel/gpu/gpu_min_clock");
-        }
-    }
-
-    if mode == 4 {
-        setvalue("performance", "/sys/class/devfreq/devfreq_mif/governor");
-    } else if mode == 2 {
-        setvalue("powersave", "/sys/class/devfreq/devfreq_mif/governor");
-    } else {
-        setvalue("simple_ondemand", "/sys/class/devfreq/devfreq_mif/governor");
     }
 }
 
@@ -372,80 +332,15 @@ fn unisoc_apply(mode: u8) {
         thermal_val,
         "/sys/module/zte_misc/parameters/thermal_control_en",
     );
-
-    if mode == 4 {
-        setvalue("performance", "/sys/class/devfreq/.gpu/governor");
-    } else if mode == 2 {
-        setvalue("powersave", "/sys/class/devfreq/.gpu/governor");
-    } else {
-        setvalue("simple_ondemand", "/sys/class/devfreq/.gpu/governor");
-    }
 }
 
-fn tensor_apply(mode: u8) {
+fn tensor_apply(_mode: u8) {
     if let Some(mali_dir) = scan_platform_dirs(".mali") {
-        let avail_path = format!("{}/available_frequencies", mali_dir);
-        if let Ok(content) = fs::read_to_string(&avail_path) {
-            let freqs: Vec<u64> = content
-                .split_whitespace()
-                .filter_map(|s| s.parse().ok())
-                .collect();
-            if !freqs.is_empty() {
-                let max_f = *freqs.iter().max().unwrap();
-                let min_f = *freqs.iter().min().unwrap();
-                let mid_f = freqs[freqs.len() / 2];
-                let (max_val, min_val) = if mode == 4 {
-                    (max_f, max_f)
-                } else if mode == 3 {
-                    (max_f, mid_f)
-                } else {
-                    (max_f, min_f)
-                };
-                setvalue(
-                    &max_val.to_string(),
-                    &format!("{}/scaling_max_freq", mali_dir),
-                );
-                setvalue(
-                    &min_val.to_string(),
-                    &format!("{}/scaling_min_freq", mali_dir),
-                );
-            }
-        }
-    }
-
-    if mode == 4 {
-        setvalue("performance", "/sys/class/devfreq/devfreq_mif/governor");
-    } else if mode == 2 {
-        setvalue("powersave", "/sys/class/devfreq/devfreq_mif/governor");
-    } else {
-        setvalue("simple_ondemand", "/sys/class/devfreq/devfreq_mif/governor");
+        setvalue("1", &format!("{}/js_ctx_scheduling_mode", mali_dir));
     }
 }
 
-fn tegra_apply(mode: u8) {
-    let base = "/sys/kernel/tegra_gpu";
-    let avail = format!("{}/available_frequencies", base);
-    if let Ok(content) = fs::read_to_string(&avail) {
-        let freqs: Vec<u64> = content
-            .split_whitespace()
-            .filter_map(|s| s.parse().ok())
-            .collect();
-        if !freqs.is_empty() {
-            let max_f = *freqs.iter().max().unwrap();
-            let min_f = *freqs.iter().min().unwrap();
-            let mid_f = freqs[freqs.len() / 2];
-            let (cap, floor) = if mode == 4 {
-                (max_f, max_f)
-            } else if mode == 3 {
-                (max_f, mid_f)
-            } else {
-                (max_f, min_f)
-            };
-            setvalue(&cap.to_string(), &format!("{}/gpu_cap_rate", base));
-            setvalue(&floor.to_string(), &format!("{}/gpu_floor_rate", base));
-        }
-    }
-}
+fn tegra_apply(_mode: u8) {}
 
 pub fn soc_apply(mode: u8, soc: u8) {
     match soc {

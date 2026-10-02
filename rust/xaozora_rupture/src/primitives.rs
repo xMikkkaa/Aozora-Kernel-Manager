@@ -147,24 +147,163 @@ pub fn set_cpu_gov(gov: &str) {
     }
 }
 
-pub fn set_gpu_freq(min: u64, max: u64) {
-    if min > 0 {
-        setvalue(&min.to_string(), "/sys/kernel/gpu/gpu_min_clock");
-    }
-    if max > 0 {
-        setvalue(&max.to_string(), "/sys/kernel/gpu/gpu_max_clock");
-    }
+pub struct GpuBackend {
+    pub freq_table: String,
+    pub set_min: String,
+    pub set_max: String,
 }
 
-pub fn get_gpu_freq_table() -> Vec<u64> {
-    fs::read_to_string("/sys/kernel/gpu/gpu_freq_table")
+fn path_exists(path: &str) -> bool {
+    std::path::Path::new(path).exists()
+}
+
+fn scan_devfreq_dirs(pattern: &str) -> Option<String> {
+    if let Ok(entries) = fs::read_dir("/sys/class/devfreq") {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.contains(pattern) {
+                return Some(name);
+            }
+        }
+    }
+    None
+}
+
+fn scan_platform_dirs(pattern: &str) -> Option<String> {
+    if let Ok(entries) = fs::read_dir("/sys/devices/platform") {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.contains(pattern) {
+                return Some(entry.path().to_string_lossy().to_string());
+            }
+        }
+    }
+    None
+}
+
+pub fn detect_gpu_backend() -> Option<GpuBackend> {
+    if path_exists("/sys/kernel/gpu/gpu_freq_table") {
+        return Some(GpuBackend {
+            freq_table: "/sys/kernel/gpu/gpu_freq_table".into(),
+            set_min: "/sys/kernel/gpu/gpu_min_clock".into(),
+            set_max: "/sys/kernel/gpu/gpu_max_clock".into(),
+        });
+    }
+    if path_exists("/sys/kernel/gpu/gpu_available_frequencies") {
+        return Some(GpuBackend {
+            freq_table: "/sys/kernel/gpu/gpu_available_frequencies".into(),
+            set_min: "/sys/kernel/gpu/gpu_min_clock".into(),
+            set_max: "/sys/kernel/gpu/gpu_max_clock".into(),
+        });
+    }
+    if path_exists("/sys/class/kgsl/kgsl-3d0/devfreq/available_frequencies") {
+        return Some(GpuBackend {
+            freq_table: "/sys/class/kgsl/kgsl-3d0/devfreq/available_frequencies".into(),
+            set_min: "/sys/class/kgsl/kgsl-3d0/devfreq/min_freq".into(),
+            set_max: "/sys/class/kgsl/kgsl-3d0/devfreq/max_freq".into(),
+        });
+    }
+    if let Some(mali) = scan_platform_dirs(".mali") {
+        let avail = format!("{}/available_frequencies", mali);
+        if path_exists(&avail) {
+            return Some(GpuBackend {
+                freq_table: avail,
+                set_min: format!("{}/scaling_min_freq", mali),
+                set_max: format!("{}/scaling_max_freq", mali),
+            });
+        }
+    }
+    if let Some(node) = scan_devfreq_dirs("mali") {
+        let base = format!("/sys/class/devfreq/{}", node);
+        let avail = format!("{}/available_frequencies", base);
+        if path_exists(&avail) {
+            return Some(GpuBackend {
+                freq_table: avail,
+                set_min: format!("{}/min_freq", base),
+                set_max: format!("{}/max_freq", base),
+            });
+        }
+    }
+    if let Some(node) = scan_devfreq_dirs(".gpu") {
+        let base = format!("/sys/class/devfreq/{}", node);
+        let avail = format!("{}/available_frequencies", base);
+        if path_exists(&avail) {
+            return Some(GpuBackend {
+                freq_table: avail,
+                set_min: format!("{}/min_freq", base),
+                set_max: format!("{}/max_freq", base),
+            });
+        }
+    }
+    if path_exists("/sys/kernel/tegra_gpu/available_frequencies") {
+        return Some(GpuBackend {
+            freq_table: "/sys/kernel/tegra_gpu/available_frequencies".into(),
+            set_min: "/sys/kernel/tegra_gpu/gpu_floor_rate".into(),
+            set_max: "/sys/kernel/tegra_gpu/gpu_cap_rate".into(),
+        });
+    }
+    None
+}
+
+pub fn apply_gpu_freq(mode: u8) {
+    let backend = match detect_gpu_backend() {
+        Some(b) => b,
+        None => return,
+    };
+    let freqs: Vec<u64> = fs::read_to_string(&backend.freq_table)
         .ok()
         .map(|c| {
             c.split_whitespace()
                 .filter_map(|s| s.parse().ok())
                 .collect()
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+    if freqs.is_empty() {
+        return;
+    }
+    let mut sorted = freqs;
+    sorted.sort_unstable();
+    let len = sorted.len();
+    let (min, max) = if len >= 5 && mode == 4 {
+        (sorted[len - 4], sorted[len - 2])
+    } else if mode == 2 || mode == 3 {
+        (sorted[0], sorted[len - 4])
+    } else {
+        (sorted[len - 1], sorted[len - 1])
+    };
+    if min > 0 {
+        setvalue(&min.to_string(), &backend.set_min);
+    }
+    if max > 0 {
+        setvalue(&max.to_string(), &backend.set_max);
+    }
+}
+
+pub fn set_gpu_freq_gaming() {
+    let backend = match detect_gpu_backend() {
+        Some(b) => b,
+        None => return,
+    };
+    let freqs: Vec<u64> = fs::read_to_string(&backend.freq_table)
+        .ok()
+        .map(|c| {
+            c.split_whitespace()
+                .filter_map(|s| s.parse().ok())
+                .collect()
+        })
+        .unwrap_or_default();
+    if freqs.len() < 2 {
+        return;
+    }
+    let mut sorted = freqs;
+    sorted.sort_unstable();
+    let len = sorted.len();
+    let min = sorted[len - 4.min(len - 1)];
+    let max = sorted[len - 2];
+    if min > 0 {
+        setvalue(&min.to_string(), &backend.set_min);
+    }
+    setvalue(&max.to_string(), &backend.set_max);
 }
 
 pub fn tune_vm_io(vfs_cache_pressure: u64, page_cluster: u64) {
