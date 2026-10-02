@@ -144,6 +144,14 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "xaozora_rupture",
+]
+
+[[package]]
+name = "xaozora_rupture"
+version = "1.0.0"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]

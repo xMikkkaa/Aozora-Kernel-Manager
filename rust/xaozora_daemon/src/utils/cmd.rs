@@ -36,8 +36,13 @@ pub fn send_toast(msg: &str) {
 }
 
 pub fn apply_mode(mode: &str) {
-    let _ = Command::new(mode)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn();
+    let helper_path = format!("/system/bin/{}", mode);
+    if std::path::Path::new(&helper_path).exists() {
+        let _ = Command::new(mode)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
+    } else {
+        xaozora_rupture::apply_profile(mode);
+    }
 }
