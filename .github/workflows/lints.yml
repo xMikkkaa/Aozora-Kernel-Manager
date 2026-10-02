@@ -6,6 +6,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 on:
   push:
@@ -69,10 +70,39 @@ jobs:
               - '**/*.gradle.kts'
               - 'gradle/**'
 
+  check-green:
+    name: Check if Commit Already Green
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - name: Check workflow run status for commit
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sha = '${{ github.event.pull_request.head.sha }}';
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head_sha: sha,
+              event: 'push',
+              status: 'success'
+            });
+            const lintsRun = runs.data.workflow_runs.find(r =>
+              r.name === 'Lints & Tests' && r.head_branch === 'dev'
+            );
+            const buildRun = runs.data.workflow_runs.find(r =>
+              r.name === 'Build CI' && r.head_branch === 'dev'
+            );
+            const skip = lintsRun && buildRun ? 'true' : 'false';
+            core.setOutput('skip', skip);
+
   android-lint-and-test:
     name: Android Lint & Unit Tests
-    needs: changes
-    if: needs.changes.outputs.skip_version_only != 'true' && needs.changes.outputs.android == 'true'
+    needs: [changes, check-green]
+    if: needs.changes.outputs.skip_version_only != 'true' && needs.changes.outputs.android == 'true' && (github.event_name != 'pull_request' || needs.check-green.outputs.skip != 'true')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -107,8 +137,8 @@ jobs:
 
   rust-lint-and-test:
     name: Rust Fmt, Clippy & Tests
-    needs: changes
-    if: needs.changes.outputs.skip_version_only != 'true' && needs.changes.outputs.rust == 'true'
+    needs: [changes, check-green]
+    if: needs.changes.outputs.skip_version_only != 'true' && needs.changes.outputs.rust == 'true' && (github.event_name != 'pull_request' || needs.check-green.outputs.skip != 'true')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
