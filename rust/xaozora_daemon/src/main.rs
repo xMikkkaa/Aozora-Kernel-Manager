@@ -16,6 +16,7 @@
 
 mod autd;
 mod config;
+mod hydra;
 mod ipc;
 mod monitor;
 mod process;
@@ -52,6 +53,8 @@ fn main() {
     let mut disable_autd = false;
     let mut reset_stats = false;
     let mut logger_path = None;
+    let mut apply_profile_arg: Option<String> = None;
+    let mut hydra_info = false;
 
     let mut i = 1;
     while i < args.len() {
@@ -63,13 +66,34 @@ fn main() {
                 logger_path = Some(args[i + 1].clone());
                 i += 1;
             }
+            "--apply-profile" if i + 1 < args.len() => {
+                apply_profile_arg = Some(args[i + 1].clone());
+                i += 1;
+            }
+            "--hydra-info" => hydra_info = true,
             _ => {}
         }
         i += 1;
     }
 
+    if hydra_info {
+        println!("{}", hydra::HYDRA_NAME);
+        println!("Version: {}", hydra::HYDRA_VERSION);
+        let helper_installed = std::path::Path::new("/system/bin/powersave").exists();
+        println!("Helper installed: {}", helper_installed);
+        println!("Profiles: powersave, balance, performance, gaming, gaming2");
+        return;
+    }
+
+    if let Some(profile) = &apply_profile_arg {
+        hydra::apply_profile(profile);
+        return;
+    }
+
     let pid_path = config::AUTD_DIR.to_owned() + "/xaozora_daemon.pid";
     config::ensure_app_dir();
+    hydra::optimize_boot_tune();
+    hydra::write_info_json();
 
     if let Ok(existing_pid_str) = fs::read_to_string(&pid_path)
         && let Ok(pid) = existing_pid_str.trim().parse::<i32>()
@@ -109,7 +133,7 @@ fn main() {
 
     if handles.is_empty() && !reset_stats {
         println!(
-            "Usage: xaozora_daemon [--enable-autd | --disable-autd] [--reset-stats] [--battery-logger <output_json_path>]"
+            "Usage: xaozora_daemon [--enable-autd | --disable-autd] [--reset-stats] [--battery-logger <output_json_path>] [--apply-profile <name>] [--hydra-info]"
         );
         let _ = fs::remove_file(&pid_path);
         std::process::exit(1);
