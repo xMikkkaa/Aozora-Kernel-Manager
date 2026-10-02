@@ -19,9 +19,8 @@ pub mod primitives;
 pub mod soc;
 
 use primitives::{
-    apply_cpu_freqs, compute_cpu_freqs, set_cpu_gov, set_hwui_target, set_settings,
-    set_cmd_power_adaptive, shell, shell_output, tune_block_io, tune_block_sched, tune_net,
-    tune_vm_io,
+    apply_cpu_freqs, compute_cpu_freqs, set_cmd_power_adaptive, set_cpu_gov, set_hwui_target,
+    set_settings, shell, shell_output, tune_block_io, tune_block_sched, tune_net, tune_vm_io,
 };
 use soc::{detect_soc, soc_apply};
 
@@ -31,19 +30,10 @@ pub const HYDRA_VERSION: &str = "1.0.0";
 pub const HYDRA_INFO_PATH: &str = "autd/hydra_info.json";
 
 pub use boot::optimize_boot_tune;
-pub use primitives::{
-    set_gpu_freq, set_cpu_freq, setvalue, tune_bore, tune_sched_lat, tune_uclamp, tune_walt,
-};
 
 pub fn write_info_json() {
     let helper_installed = std::path::Path::new("/system/bin/powersave").exists();
-    let profiles = vec![
-        "powersave",
-        "balance",
-        "performance",
-        "gaming",
-        "gaming2",
-    ];
+    let profiles = vec!["powersave", "balance", "performance", "gaming", "gaming2"];
     let info = serde_json::json!({
         "name": HYDRA_NAME,
         "version": HYDRA_VERSION,

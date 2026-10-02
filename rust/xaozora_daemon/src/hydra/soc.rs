@@ -16,7 +16,7 @@
 
 use std::fs;
 
-use super::primitives::{shell_output, setvalue, setvalue_unlocked};
+use super::primitives::{setvalue, setvalue_unlocked, shell_output};
 
 pub fn detect_soc() -> u8 {
     let mut info = String::new();
@@ -30,7 +30,11 @@ pub fn detect_soc() -> u8 {
 
     let lower = info.to_lowercase();
 
-    if lower.contains("mediatek") || lower.contains("dimensity") || lower.contains("mt6") || lower.contains("mt8") {
+    if lower.contains("mediatek")
+        || lower.contains("dimensity")
+        || lower.contains("mt6")
+        || lower.contains("mt8")
+    {
         1
     } else if lower.contains("qcom")
         || lower.contains("snapdragon")
@@ -44,9 +48,17 @@ pub fn detect_soc() -> u8 {
         2
     } else if lower.contains("exynos") {
         3
-    } else if lower.contains("unisoc") || lower.contains("sprd") || lower.contains("ums9") || lower.contains("ums5") {
+    } else if lower.contains("unisoc")
+        || lower.contains("sprd")
+        || lower.contains("ums9")
+        || lower.contains("ums5")
+    {
         4
-    } else if lower.contains("gs") || lower.contains("tensor") || lower.contains("zuma") || lower.contains("zephyr") {
+    } else if lower.contains("gs")
+        || lower.contains("tensor")
+        || lower.contains("zuma")
+        || lower.contains("zephyr")
+    {
         5
     } else if lower.contains("tegra") || lower.contains("te18") || lower.contains("te19") {
         6
@@ -113,31 +125,49 @@ fn mediatek_apply(mode: u8) {
         setvalue("0", "/sys/kernel/fpsgo/fbt/thrm_enable");
         setvalue("1", "/sys/module/mtk_fpsgo/parameters/xgf_uboost");
         setvalue("1", "/proc/cpufreq/cpufreq_sched_disable");
-        setvalue("1", "/sys/devices/platform/boot_dramboost/dramboost/dramboost");
+        setvalue(
+            "1",
+            "/sys/devices/platform/boot_dramboost/dramboost/dramboost",
+        );
     } else if mode == 2 {
         setvalue("1", "/proc/cpufreq/cpufreq_power_mode");
         setvalue("0", "/sys/kernel/fpsgo/fbt/ultra_rescue");
         setvalue("1", "/sys/kernel/fpsgo/fbt/thrm_enable");
         setvalue("0", "/sys/module/mtk_fpsgo/parameters/xgf_uboost");
         setvalue("0", "/proc/cpufreq/cpufreq_sched_disable");
-        setvalue("0", "/sys/devices/platform/boot_dramboost/dramboost/dramboost");
+        setvalue(
+            "0",
+            "/sys/devices/platform/boot_dramboost/dramboost/dramboost",
+        );
     } else {
         setvalue("0", "/proc/cpufreq/cpufreq_power_mode");
         setvalue("0", "/sys/kernel/fpsgo/fbt/ultra_rescue");
         setvalue("1", "/sys/kernel/fpsgo/fbt/thrm_enable");
         setvalue("0", "/sys/module/mtk_fpsgo/parameters/xgf_uboost");
         setvalue("0", "/proc/cpufreq/cpufreq_sched_disable");
-        setvalue("0", "/sys/devices/platform/boot_dramboost/dramboost/dramboost");
+        setvalue(
+            "0",
+            "/sys/devices/platform/boot_dramboost/dramboost/dramboost",
+        );
     }
 
     setvalue("2", "/sys/devices/system/cpu/eas/enable");
-    setvalue("stop 0", "/proc/mtk_batoc_throttling/battery_oc_protect_stop");
+    setvalue(
+        "stop 0",
+        "/proc/mtk_batoc_throttling/battery_oc_protect_stop",
+    );
 
     if mode == 4 {
-        setvalue("0", "/sys/devices/platform/10012000.dvfsrc/helio-dvfsrc/dvfsrc_req_ddr_opp");
+        setvalue(
+            "0",
+            "/sys/devices/platform/10012000.dvfsrc/helio-dvfsrc/dvfsrc_req_ddr_opp",
+        );
         setvalue("0", "/sys/kernel/helio-dvfsrc/dvfsrc_force_vcore_dvfs_opp");
     } else {
-        setvalue("-1", "/sys/devices/platform/10012000.dvfsrc/helio-dvfsrc/dvfsrc_req_ddr_opp");
+        setvalue(
+            "-1",
+            "/sys/devices/platform/10012000.dvfsrc/helio-dvfsrc/dvfsrc_req_ddr_opp",
+        );
         setvalue("-1", "/sys/kernel/helio-dvfsrc/dvfsrc_force_vcore_dvfs_opp");
     }
 
@@ -172,7 +202,10 @@ fn snapdragon_apply(mode: u8) {
         setvalue_unlocked("1", "/sys/module/msm_perfmon/parameters/touch_boost_enable");
         setvalue_unlocked("1", "/sys/module/msm_perfmon/parameters/touch_boost_freq");
         setvalue("1", "/sys/module/msm_performance/parameters/touchboost");
-        setvalue("N", "/sys/module/adreno_idler/parameters/adreno_idler_active");
+        setvalue(
+            "N",
+            "/sys/module/adreno_idler/parameters/adreno_idler_active",
+        );
     } else if mode == 3 {
         setvalue_unlocked("0", &format!("{}/force_clk_on", kgsl));
         setvalue_unlocked("0", &format!("{}/default_pwrlevel", kgsl));
@@ -182,7 +215,10 @@ fn snapdragon_apply(mode: u8) {
         setvalue_unlocked("0", "/sys/module/msm_perfmon/parameters/touch_boost_enable");
         setvalue_unlocked("0", "/sys/module/msm_perfmon/parameters/touch_boost_freq");
         setvalue_unlocked("0", "/sys/module/msm_performance/parameters/touchboost");
-        setvalue_unlocked("N", "/sys/module/adreno_idler/parameters/adreno_idler_active");
+        setvalue_unlocked(
+            "N",
+            "/sys/module/adreno_idler/parameters/adreno_idler_active",
+        );
     } else if mode == 2 {
         setvalue_unlocked("0", &format!("{}/force_clk_on", kgsl));
         setvalue_unlocked("0", &format!("{}/default_pwrlevel", kgsl));
@@ -192,7 +228,10 @@ fn snapdragon_apply(mode: u8) {
         setvalue_unlocked("0", "/sys/module/msm_perfmon/parameters/touch_boost_enable");
         setvalue_unlocked("0", "/sys/module/msm_perfmon/parameters/touch_boost_freq");
         setvalue_unlocked("0", "/sys/module/msm_performance/parameters/touchboost");
-        setvalue("Y", "/sys/module/adreno_idler/parameters/adreno_idler_active");
+        setvalue(
+            "Y",
+            "/sys/module/adreno_idler/parameters/adreno_idler_active",
+        );
     } else {
         setvalue_unlocked("0", &format!("{}/force_clk_on", kgsl));
         setvalue_unlocked("0", &format!("{}/default_pwrlevel", kgsl));
@@ -202,7 +241,10 @@ fn snapdragon_apply(mode: u8) {
         setvalue_unlocked("0", "/sys/module/msm_perfmon/parameters/touch_boost_enable");
         setvalue_unlocked("0", "/sys/module/msm_perfmon/parameters/touch_boost_freq");
         setvalue_unlocked("0", "/sys/module/msm_performance/parameters/touchboost");
-        setvalue_unlocked("N", "/sys/module/adreno_idler/parameters/adreno_idler_active");
+        setvalue_unlocked(
+            "N",
+            "/sys/module/adreno_idler/parameters/adreno_idler_active",
+        );
     }
 
     let (up, down, g_up, g_down) = if mode == 4 {
@@ -220,8 +262,14 @@ fn snapdragon_apply(mode: u8) {
     if let Ok(entries) = fs::read_dir("/sys/devices/system/cpu") {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with("cpu") && name.len() > 3 && name[3..].chars().all(|c| c.is_ascii_digit()) {
-                setvalue("0", entry.path().join("core_ctl/enable").to_str().unwrap_or(""));
+            if name.starts_with("cpu")
+                && name.len() > 3
+                && name[3..].chars().all(|c| c.is_ascii_digit())
+            {
+                setvalue(
+                    "0",
+                    entry.path().join("core_ctl/enable").to_str().unwrap_or(""),
+                );
             }
         }
     }
@@ -239,7 +287,11 @@ fn snapdragon_apply(mode: u8) {
 
 fn exynos_apply(mode: u8) {
     if let Some(mali_dir) = scan_platform_dirs(".mali") {
-        let policy = if mode == 4 { "always_on" } else { "coarse_demand" };
+        let policy = if mode == 4 {
+            "always_on"
+        } else {
+            "coarse_demand"
+        };
         setvalue(policy, &format!("{}/power_policy", mali_dir));
     }
 
@@ -291,8 +343,14 @@ fn unisoc_apply(mode: u8) {
             if name.starts_with("policy") {
                 let uscfreq = entry.path().join("uscfreq");
                 setvalue(margin, uscfreq.join("freq_margin").to_str().unwrap_or(""));
-                setvalue(down_rate, uscfreq.join("down_rate_limit_us").to_str().unwrap_or(""));
-                setvalue(up_rate, uscfreq.join("up_rate_limit_us").to_str().unwrap_or(""));
+                setvalue(
+                    down_rate,
+                    uscfreq.join("down_rate_limit_us").to_str().unwrap_or(""),
+                );
+                setvalue(
+                    up_rate,
+                    uscfreq.join("up_rate_limit_us").to_str().unwrap_or(""),
+                );
             }
         }
     }
@@ -304,10 +362,16 @@ fn unisoc_apply(mode: u8) {
     } else {
         "0"
     };
-    setvalue(ddr_val, "/sys/class/devfreq/scene-frequency/sprd-governor/scaling_force_ddr_freq");
+    setvalue(
+        ddr_val,
+        "/sys/class/devfreq/scene-frequency/sprd-governor/scaling_force_ddr_freq",
+    );
 
     let thermal_val = if mode == 4 { "0" } else { "1" };
-    setvalue(thermal_val, "/sys/module/zte_misc/parameters/thermal_control_en");
+    setvalue(
+        thermal_val,
+        "/sys/module/zte_misc/parameters/thermal_control_en",
+    );
 
     if mode == 4 {
         setvalue("performance", "/sys/class/devfreq/.gpu/governor");
@@ -337,8 +401,14 @@ fn tensor_apply(mode: u8) {
                 } else {
                     (max_f, min_f)
                 };
-                setvalue(&max_val.to_string(), &format!("{}/scaling_max_freq", mali_dir));
-                setvalue(&min_val.to_string(), &format!("{}/scaling_min_freq", mali_dir));
+                setvalue(
+                    &max_val.to_string(),
+                    &format!("{}/scaling_max_freq", mali_dir),
+                );
+                setvalue(
+                    &min_val.to_string(),
+                    &format!("{}/scaling_min_freq", mali_dir),
+                );
             }
         }
     }

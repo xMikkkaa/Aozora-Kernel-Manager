@@ -27,7 +27,10 @@ pub fn optimize_boot_tune() {
             if name.starts_with("loop") {
                 continue;
             }
-            setvalue("0", entry.path().join("queue/iostats").to_str().unwrap_or(""));
+            setvalue(
+                "0",
+                entry.path().join("queue/iostats").to_str().unwrap_or(""),
+            );
         }
     }
     for dev in ["sda", "dm-0", "mmcblk0", "mmcblk1", "mmcblk0rpmb"] {
@@ -79,7 +82,14 @@ pub fn optimize_boot_tune() {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
             if name.contains("mali") {
-                setvalue("1", entry.path().join("js_ctx_scheduling_mode").to_str().unwrap_or(""));
+                setvalue(
+                    "1",
+                    entry
+                        .path()
+                        .join("js_ctx_scheduling_mode")
+                        .to_str()
+                        .unwrap_or(""),
+                );
             }
         }
     }

@@ -60,10 +60,10 @@ pub fn list_policies() -> Vec<u32> {
     if let Ok(entries) = fs::read_dir("/sys/devices/system/cpu/cpufreq") {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if let Some(num) = name.strip_prefix("policy") {
-                if let Ok(p) = num.parse::<u32>() {
-                    policies.push(p);
-                }
+            if let Some(num) = name.strip_prefix("policy")
+                && let Ok(p) = num.parse::<u32>()
+            {
+                policies.push(p);
             }
         }
     }
@@ -130,6 +130,7 @@ pub fn get_target_freq(policy: u32, mode: u8) -> u64 {
     }
 }
 
+#[allow(dead_code)]
 pub fn set_cpu_freq(min: u64, max: u64) {
     for policy in list_policies() {
         if min > 0 {
@@ -147,6 +148,7 @@ pub fn set_cpu_gov(gov: &str) {
     }
 }
 
+#[allow(dead_code)]
 pub fn set_gpu_freq(min: u64, max: u64) {
     if min > 0 {
         setvalue(&min.to_string(), "/sys/kernel/gpu/gpu_min_clock");
@@ -156,9 +158,14 @@ pub fn set_gpu_freq(min: u64, max: u64) {
     }
 }
 
+#[allow(dead_code)]
 pub fn tune_walt(hs_l: u64, hs_b: u64, rtg_l: u64, rtg_b: u64, up: u64, down: u64) {
     for policy in list_policies() {
-        let (hs, rtg) = if policy == 0 { (hs_l, rtg_l) } else { (hs_b, rtg_b) };
+        let (hs, rtg) = if policy == 0 {
+            (hs_l, rtg_l)
+        } else {
+            (hs_b, rtg_b)
+        };
         let walt_dir = policy_path(policy, "walt");
         let schedutil_dir = policy_path(policy, "schedutil");
         if hs > 0 {
@@ -170,40 +177,67 @@ pub fn tune_walt(hs_l: u64, hs_b: u64, rtg_l: u64, rtg_b: u64, up: u64, down: u6
         }
         if up > 0 {
             setvalue(&up.to_string(), &format!("{}/up_rate_limit_us", walt_dir));
-            setvalue(&up.to_string(), &format!("{}/up_rate_limit_us", schedutil_dir));
+            setvalue(
+                &up.to_string(),
+                &format!("{}/up_rate_limit_us", schedutil_dir),
+            );
         }
         if down > 0 {
-            setvalue(&down.to_string(), &format!("{}/down_rate_limit_us", walt_dir));
-            setvalue(&down.to_string(), &format!("{}/down_rate_limit_us", schedutil_dir));
+            setvalue(
+                &down.to_string(),
+                &format!("{}/down_rate_limit_us", walt_dir),
+            );
+            setvalue(
+                &down.to_string(),
+                &format!("{}/down_rate_limit_us", schedutil_dir),
+            );
         }
     }
 }
 
 pub fn tune_vm_io(vfs_cache_pressure: u64, page_cluster: u64) {
     if vfs_cache_pressure > 0 {
-        setvalue(&vfs_cache_pressure.to_string(), "/proc/sys/vm/vfs_cache_pressure");
+        setvalue(
+            &vfs_cache_pressure.to_string(),
+            "/proc/sys/vm/vfs_cache_pressure",
+        );
     }
     setvalue(&page_cluster.to_string(), "/proc/sys/vm/page-cluster");
 }
 
+#[allow(dead_code)]
 pub fn tune_uclamp(min: u64, latency_sensitive: u64) {
     setvalue(&min.to_string(), "/dev/cpuctl/top-app/cpu.uclamp.min");
-    setvalue(&latency_sensitive.to_string(), "/dev/cpuctl/top-app/cpu.uclamp.latency_sensitive");
+    setvalue(
+        &latency_sensitive.to_string(),
+        "/dev/cpuctl/top-app/cpu.uclamp.latency_sensitive",
+    );
 }
 
+#[allow(dead_code)]
 pub fn tune_sched_lat(base_slice_ns: u64) {
     setvalue("1", "/proc/sys/kernel/sched_child_runs_first");
     setvalue("32", "/proc/sys/kernel/sched_nr_migrate");
     setvalue("50000", "/proc/sys/kernel/sched_migration_cost_ns");
     if base_slice_ns > 0 {
-        setvalue(&base_slice_ns.to_string(), "/proc/sys/kernel/sched_base_slice_ns");
+        setvalue(
+            &base_slice_ns.to_string(),
+            "/proc/sys/kernel/sched_base_slice_ns",
+        );
     }
 }
 
+#[allow(dead_code)]
 pub fn tune_bore(bore: u64, penalty_offset: u64, penalty_scale: u64) {
     setvalue(&bore.to_string(), "/proc/sys/kernel/sched_bore");
-    setvalue(&penalty_offset.to_string(), "/proc/sys/kernel/sched_burst_penalty_offset");
-    setvalue(&penalty_scale.to_string(), "/proc/sys/kernel/sched_burst_penalty_scale");
+    setvalue(
+        &penalty_offset.to_string(),
+        "/proc/sys/kernel/sched_burst_penalty_offset",
+    );
+    setvalue(
+        &penalty_scale.to_string(),
+        "/proc/sys/kernel/sched_burst_penalty_scale",
+    );
 }
 
 pub fn tune_block_io(iostats: u64, add_random: u64, read_ahead_kb: u64, nr_requests: u64) {
@@ -214,16 +248,31 @@ pub fn tune_block_io(iostats: u64, add_random: u64, read_ahead_kb: u64, nr_reque
                 continue;
             }
             let queue = entry.path().join("queue");
-            setvalue(&iostats.to_string(), queue.join("iostats").to_str().unwrap_or(""));
-            setvalue(&add_random.to_string(), queue.join("add_random").to_str().unwrap_or(""));
-            setvalue(&read_ahead_kb.to_string(), queue.join("read_ahead_kb").to_str().unwrap_or(""));
-            setvalue(&nr_requests.to_string(), queue.join("nr_requests").to_str().unwrap_or(""));
+            setvalue(
+                &iostats.to_string(),
+                queue.join("iostats").to_str().unwrap_or(""),
+            );
+            setvalue(
+                &add_random.to_string(),
+                queue.join("add_random").to_str().unwrap_or(""),
+            );
+            setvalue(
+                &read_ahead_kb.to_string(),
+                queue.join("read_ahead_kb").to_str().unwrap_or(""),
+            );
+            setvalue(
+                &nr_requests.to_string(),
+                queue.join("nr_requests").to_str().unwrap_or(""),
+            );
         }
     }
 }
 
 pub fn tune_net(low_latency: u64, ecn: u64, fastopen: u64, timestamps: u64) {
-    setvalue(&low_latency.to_string(), "/proc/sys/net/ipv4/tcp_low_latency");
+    setvalue(
+        &low_latency.to_string(),
+        "/proc/sys/net/ipv4/tcp_low_latency",
+    );
     setvalue(&ecn.to_string(), "/proc/sys/net/ipv4/tcp_ecn");
     setvalue(&fastopen.to_string(), "/proc/sys/net/ipv4/tcp_fastopen");
     setvalue(&timestamps.to_string(), "/proc/sys/net/ipv4/tcp_timestamps");
@@ -238,13 +287,19 @@ pub fn tune_block_sched(scheduler: &str, rq_affinity: u64) {
             }
             let queue = entry.path().join("queue");
             setvalue(scheduler, queue.join("scheduler").to_str().unwrap_or(""));
-            setvalue(&rq_affinity.to_string(), queue.join("rq_affinity").to_str().unwrap_or(""));
+            setvalue(
+                &rq_affinity.to_string(),
+                queue.join("rq_affinity").to_str().unwrap_or(""),
+            );
         }
     }
 }
 
 pub fn set_hwui_target(percent: u64) {
-    shell(&format!("setprop debug.hwui.target_cpu_time_percent {}", percent));
+    shell(&format!(
+        "setprop debug.hwui.target_cpu_time_percent {}",
+        percent
+    ));
     shell(&format!("iorenice -p {} 7 idle", std::process::id()));
     shell(&format!("renice -n 19 -p {}", std::process::id()));
     shell(&format!("taskset -ap 1 {}", std::process::id()));
