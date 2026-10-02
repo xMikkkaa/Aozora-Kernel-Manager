@@ -19,9 +19,9 @@ pub mod primitives;
 pub mod soc;
 
 use primitives::{
-    apply_cpu_freqs, apply_gpu_freq, compute_cpu_freqs, set_cmd_power_adaptive, set_cpu_gov,
-    set_gpu_freq_gaming, set_hwui_target, set_settings, shell, tune_block_io, tune_block_sched,
-    tune_net, tune_vm_io,
+    apply_cpu_freqs, apply_gpu_freq, apply_gpu_freq_max, compute_cpu_freqs, set_cmd_power_adaptive,
+    set_cpu_gov, set_gpu_freq_gaming, set_hwui_target, set_settings, shell, tune_block_io,
+    tune_block_sched, tune_net, tune_vm_io,
 };
 use soc::{detect_soc, soc_apply};
 
@@ -113,7 +113,7 @@ pub fn apply_performance() {
     set_settings("low_priority", "0");
     set_cmd_power_adaptive(false);
     soc_apply(4, soc);
-    apply_gpu_freq(4);
+    apply_gpu_freq_max();
     cleanup_mode_ops();
 }
 
@@ -149,7 +149,7 @@ pub fn apply_gaming2() {
     set_settings("low_priority", "0");
     set_cmd_power_adaptive(false);
     soc_apply(4, soc);
-    apply_gpu_freq(4);
+    apply_gpu_freq_max();
     cleanup_mode_ops();
 }
 

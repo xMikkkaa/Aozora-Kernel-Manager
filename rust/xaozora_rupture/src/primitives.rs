@@ -279,6 +279,31 @@ pub fn apply_gpu_freq(mode: u8) {
     }
 }
 
+pub fn apply_gpu_freq_max() {
+    let backend = match detect_gpu_backend() {
+        Some(b) => b,
+        None => return,
+    };
+    let freqs: Vec<u64> = fs::read_to_string(&backend.freq_table)
+        .ok()
+        .map(|c| {
+            c.split_whitespace()
+                .filter_map(|s| s.parse().ok())
+                .collect()
+        })
+        .unwrap_or_default();
+    if freqs.is_empty() {
+        return;
+    }
+    let mut sorted = freqs;
+    sorted.sort_unstable();
+    let max = sorted[sorted.len() - 1];
+    if max > 0 {
+        setvalue(&max.to_string(), &backend.set_max);
+        setvalue(&max.to_string(), &backend.set_min);
+    }
+}
+
 pub fn set_gpu_freq_gaming() {
     let backend = match detect_gpu_backend() {
         Some(b) => b,
