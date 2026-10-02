@@ -87,19 +87,41 @@ jobs:
       - name: Setup Rust + NDK
         uses: ./.github/actions/setup-rust-ndk
 
+      - name: Setup Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ ! -z "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > manager/app/aozora.jks
+            {
+              echo "storeFile=manager/app/aozora.jks"
+              echo "storePassword=$KEYSTORE_PASSWORD"
+              echo "keyAlias=$KEY_ALIAS"
+              echo "keyPassword=$KEY_PASSWORD"
+            } > key.properties
+          else
+            echo "Error: KEYSTORE_BASE64 missing"
+            exit 1
+          fi
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug
+      - name: Build Release APK
+        run: |
+          SHORT_HASH=$(git rev-parse --short HEAD)
+          ./gradlew assembleRelease -PciVersionSuffix=-${SHORT_HASH}
 
       - name: Report APK Size
         run: |
-          APK="$(ls manager/app/build/outputs/apk/*/app-*.apk | head -n 1)"
+          APK="manager/app/build/outputs/apk/release/app-release.apk"
           SIZE_BYTES="$(stat -c%s "$APK")"
           SIZE_HR="$(du -h "$APK" | cut -f1)"
           {
-            echo "### APK Size"
+            echo "### APK Info"
             echo ""
             echo "| File | Size | Bytes |"
             echo "| ---- | ---- | ----- |"
@@ -116,5 +138,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: Aozora-Manager-APK
-          path: manager/app/build/outputs/apk/*/app-*.apk
+          path: manager/app/build/outputs/apk/release/app-release.apk
           retention-days: 14
