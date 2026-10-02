@@ -19,9 +19,9 @@ pub mod primitives;
 pub mod soc;
 
 use primitives::{
-    apply_cpu_freqs, compute_cpu_freqs, get_gpu_freq_table, set_cmd_power_adaptive, set_cpu_gov,
-    set_gpu_freq, set_hwui_target, set_settings, shell, tune_block_io, tune_block_sched, tune_net,
-    tune_vm_io,
+    apply_cpu_freqs, apply_gpu_freq, apply_gpu_freq_max, compute_cpu_freqs, set_cmd_power_adaptive,
+    set_cpu_gov, set_gpu_freq_gaming, set_hwui_target, set_settings, shell, tune_block_io,
+    tune_block_sched, tune_net, tune_vm_io,
 };
 use soc::{detect_soc, soc_apply};
 
@@ -77,6 +77,7 @@ pub fn apply_powersave() {
     set_settings("low_priority", "1");
     set_cmd_power_adaptive(true);
     soc_apply(2, soc);
+    apply_gpu_freq(2);
     cleanup_mode_ops();
 }
 
@@ -94,6 +95,7 @@ pub fn apply_balance() {
     set_settings("low_priority", "0");
     set_cmd_power_adaptive(false);
     soc_apply(3, soc);
+    apply_gpu_freq(3);
     cleanup_mode_ops();
 }
 
@@ -111,6 +113,7 @@ pub fn apply_performance() {
     set_settings("low_priority", "0");
     set_cmd_power_adaptive(false);
     soc_apply(4, soc);
+    apply_gpu_freq_max();
     cleanup_mode_ops();
 }
 
@@ -127,16 +130,8 @@ pub fn apply_gaming() {
     set_settings("high_priority", "1");
     set_settings("low_priority", "0");
     set_cmd_power_adaptive(false);
-
-    let gpu_freqs = get_gpu_freq_table();
-    if gpu_freqs.len() >= 2 {
-        let mut sorted = gpu_freqs;
-        sorted.sort_unstable();
-        let second_highest = sorted[sorted.len() - 2];
-        set_gpu_freq(0, second_highest);
-    }
-
     soc_apply(3, soc);
+    set_gpu_freq_gaming();
     cleanup_mode_ops();
 }
 
@@ -153,14 +148,8 @@ pub fn apply_gaming2() {
     set_settings("high_priority", "1");
     set_settings("low_priority", "0");
     set_cmd_power_adaptive(false);
-
-    let gpu_freqs = get_gpu_freq_table();
-    if !gpu_freqs.is_empty() {
-        let highest = gpu_freqs.iter().max().unwrap();
-        set_gpu_freq(0, *highest);
-    }
-
     soc_apply(4, soc);
+    apply_gpu_freq_max();
     cleanup_mode_ops();
 }
 

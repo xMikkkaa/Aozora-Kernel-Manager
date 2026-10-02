@@ -30,7 +30,17 @@ updates:
         patterns:
           - "*"
 
-  # 4. Update GitHub Actions
+  # 4. Update Cargo dependencies (Rust Rupture)
+  - package-ecosystem: "cargo"
+    directory: "/rust/xaozora_rupture"
+    schedule:
+      interval: "weekly"
+    groups:
+      cargo-rupture:
+        patterns:
+          - "*"
+
+  # 5. Update GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

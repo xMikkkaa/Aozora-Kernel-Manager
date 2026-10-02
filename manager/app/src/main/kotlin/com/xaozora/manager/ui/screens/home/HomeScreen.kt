@@ -190,9 +190,8 @@ fun HomeScreen(
     var showSystemInfoDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
     
     var showCpuControlDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
-    var littleConfig by remember { androidx.compose.runtime.mutableStateOf<com.xaozora.manager.core.utils.CpuClusterConfig?>(null) }
-    var bigConfig by remember { androidx.compose.runtime.mutableStateOf<com.xaozora.manager.core.utils.CpuClusterConfig?>(null) }
-    
+    var cpuClusterConfigs by remember { androidx.compose.runtime.mutableStateOf<List<com.xaozora.manager.core.utils.CpuClusterConfig>?>(null) }
+
     var showGpuControlDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
     var gpuConfig by remember { androidx.compose.runtime.mutableStateOf<com.xaozora.manager.core.utils.GpuConfig?>(null) }
     val coroutineScope = rememberCoroutineScope()
@@ -200,8 +199,7 @@ fun HomeScreen(
     LaunchedEffect(showCpuControlDialog) {
         if (showCpuControlDialog) {
             withContext(Dispatchers.IO) {
-                littleConfig = com.xaozora.manager.core.utils.CpuControlUtils.getClusterConfig(0, "LITTLE")
-                bigConfig = com.xaozora.manager.core.utils.CpuControlUtils.getClusterConfig(4, "BIG")
+                cpuClusterConfigs = com.xaozora.manager.core.utils.CpuControlUtils.getClusterConfigs()
             }
         }
     }
@@ -293,24 +291,24 @@ fun HomeScreen(
             )
         }
 
-        if (showCpuControlDialog && littleConfig != null && bigConfig != null) {
+        if (showCpuControlDialog && cpuClusterConfigs != null) {
             com.xaozora.manager.ui.components.CpuControlDialog(
                 hazeState = hazeState,
-                littleConfig = littleConfig!!,
-                bigConfig = bigConfig!!,
+                clusterConfigs = cpuClusterConfigs!!,
                 onDismiss = {
                     showCpuControlDialog = false
-                    littleConfig = null
-                    bigConfig = null
+                    cpuClusterConfigs = null
                 },
-                onApply = { lMin, lMax, lGov, bMin, bMax, bGov ->
+                onApply = { selections ->
                     coroutineScope.launch(Dispatchers.IO) {
-                        com.xaozora.manager.core.utils.CpuControlUtils.applyClusterConfig(0, lMin, lMax, lGov)
-                        com.xaozora.manager.core.utils.CpuControlUtils.applyClusterConfig(4, bMin, bMax, bGov)
+                        selections.forEach { sel ->
+                            com.xaozora.manager.core.utils.CpuControlUtils.applyClusterConfig(
+                                sel.policyId, sel.minFreq, sel.maxFreq, sel.governor
+                            )
+                        }
                     }
                     showCpuControlDialog = false
-                    littleConfig = null
-                    bigConfig = null
+                    cpuClusterConfigs = null
                 }
             )
         }
