@@ -384,7 +384,7 @@ pub fn poll_hardware() -> RealTimeMetrics {
     let g_load_str = read_system_file("/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage")
         .trim()
         .to_string();
-    let raw_load_pct = g_load_str
+    let mut raw_load_pct = g_load_str
         .replace("%", "")
         .trim()
         .parse::<f32>()
@@ -409,11 +409,81 @@ pub fn poll_hardware() -> RealTimeMetrics {
         max_freq_val = read_system_file("/sys/class/kgsl/kgsl-3d0/devfreq/max_freq")
             .trim()
             .parse::<u64>()
-            .unwrap_or(710000000);
+            .unwrap_or(0);
+    }
+
+    if g_freq_val == 0 && max_freq_val == 0 {
+        let devfreq_gpu = execute_cmd_and_get_output(
+            "ls /sys/class/devfreq 2>/dev/null | grep -m1 'mali\\|\\.gpu'",
+        );
+        let devfreq_gpu = devfreq_gpu.trim();
+        if !devfreq_gpu.is_empty() {
+            let base = format!("/sys/class/devfreq/{}", devfreq_gpu);
+            g_freq_val = read_system_file(&format!("{}/cur_freq", base))
+                .trim()
+                .parse::<u64>()
+                .unwrap_or(0);
+            max_freq_val = read_system_file(&format!("{}/max_freq", base))
+                .trim()
+                .parse::<u64>()
+                .unwrap_or(0);
+            let load_str = read_system_file(&format!("{}/load", base))
+                .trim()
+                .to_string();
+            raw_load_pct = load_str
+                .split_whitespace()
+                .next()
+                .unwrap_or("0")
+                .trim_end_matches('%')
+                .parse::<f32>()
+                .unwrap_or(0.0);
+        }
+    }
+
+    if g_freq_val == 0 && max_freq_val == 0 {
+        let mali_dir =
+            execute_cmd_and_get_output("ls -d /sys/devices/platform/*mali* 2>/dev/null | head -1");
+        let mali_dir = mali_dir.trim();
+        if !mali_dir.is_empty() {
+            let load_str = read_system_file(&format!("{}/load", mali_dir))
+                .trim()
+                .to_string();
+            if !load_str.is_empty() {
+                raw_load_pct = load_str
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("0")
+                    .trim_end_matches('%')
+                    .parse::<f32>()
+                    .unwrap_or(0.0);
+            }
+            if g_freq_val == 0 {
+                let cur_str = read_system_file(&format!("{}/cur_freq", mali_dir))
+                    .trim()
+                    .to_string();
+                if !cur_str.is_empty() {
+                    g_freq_val = cur_str.parse::<u64>().unwrap_or(0);
+                }
+            }
+            if max_freq_val == 0 {
+                let max_str = read_system_file(&format!("{}/max_freq", mali_dir))
+                    .trim()
+                    .to_string();
+                if !max_str.is_empty() {
+                    max_freq_val = max_str.parse::<u64>().unwrap_or(0);
+                }
+            }
+        }
+    }
+
+    if max_freq_val == 0 {
+        max_freq_val = 710000000;
     }
 
     let mut gpu_load = 0.0;
-    if max_freq_val > 0 {
+    if raw_load_pct > 0.0 {
+        gpu_load = (raw_load_pct / 100.0).clamp(0.0, 1.0);
+    } else if max_freq_val > 0 {
         gpu_load =
             ((raw_load_pct / 100.0) * (g_freq_val as f32 / max_freq_val as f32)).clamp(0.0, 1.0);
     }
