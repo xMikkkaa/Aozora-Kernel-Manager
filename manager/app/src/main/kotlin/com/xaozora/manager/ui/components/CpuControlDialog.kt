@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -21,6 +22,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import com.xaozora.manager.core.utils.CpuClusterConfig
+import com.xaozora.manager.core.utils.CpuPolicySelection
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
@@ -30,18 +32,20 @@ import dev.chrisbanes.haze.hazeEffect
 @Composable
 fun CpuControlDialog(
     hazeState: HazeState,
-    littleConfig: CpuClusterConfig,
-    bigConfig: CpuClusterConfig,
+    clusterConfigs: List<CpuClusterConfig>,
     onDismiss: () -> Unit,
-    onApply: (littleMin: String, littleMax: String, littleGov: String, bigMin: String, bigMax: String, bigGov: String) -> Unit
+    onApply: (List<CpuPolicySelection>) -> Unit
 ) {
-    var littleMin by remember { mutableStateOf(littleConfig.minFreq) }
-    var littleMax by remember { mutableStateOf(littleConfig.maxFreq) }
-    var littleGov by remember { mutableStateOf(littleConfig.governor) }
-
-    var bigMin by remember { mutableStateOf(bigConfig.minFreq) }
-    var bigMax by remember { mutableStateOf(bigConfig.maxFreq) }
-    var bigGov by remember { mutableStateOf(bigConfig.governor) }
+    val selections = remember(clusterConfigs) {
+        mutableStateMapOf<Int, CpuPolicySelection>()
+    }
+    clusterConfigs.forEach { config ->
+        if (!selections.containsKey(config.id)) {
+            selections[config.id] = CpuPolicySelection(
+                config.id, config.minFreq, config.maxFreq, config.governor
+            )
+        }
+    }
 
     val surfaceContainer = MaterialTheme.colorScheme.surfaceContainer
     val dialogStyle = remember(surfaceContainer) {
@@ -93,32 +97,27 @@ fun CpuControlDialog(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    ClusterControlSection(
-                        title = "LITTLE Cluster (CPU 0-3)",
-                        config = littleConfig,
-                        selectedMin = littleMin,
-                        selectedMax = littleMax,
-                        selectedGov = littleGov,
-                        onMinChange = { littleMin = it },
-                        onMaxChange = { littleMax = it },
-                        onGovChange = { littleGov = it }
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    ClusterControlSection(
-                        title = "BIG Cluster (CPU 4-7)",
-                        config = bigConfig,
-                        selectedMin = bigMin,
-                        selectedMax = bigMax,
-                        selectedGov = bigGov,
-                        onMinChange = { bigMin = it },
-                        onMaxChange = { bigMax = it },
-                        onGovChange = { bigGov = it }
-                    )
+                    clusterConfigs.forEachIndexed { index, config ->
+                        val sel = selections[config.id] ?: CpuPolicySelection(
+                            config.id, config.minFreq, config.maxFreq, config.governor
+                        )
+                        ClusterControlSection(
+                            title = "${config.name} Cluster (Policy ${config.id})",
+                            config = config,
+                            selectedMin = sel.minFreq,
+                            selectedMax = sel.maxFreq,
+                            selectedGov = sel.governor,
+                            onMinChange = { selections[config.id] = sel.copy(minFreq = it) },
+                            onMaxChange = { selections[config.id] = sel.copy(maxFreq = it) },
+                            onGovChange = { selections[config.id] = sel.copy(governor = it) }
+                        )
+                        if (index < clusterConfigs.size - 1) {
+                            Spacer(modifier = Modifier.height(24.dp))
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(32.dp))
-                    
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End
@@ -127,7 +126,9 @@ fun CpuControlDialog(
                             Text("Cancel", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Spacer(modifier = Modifier.width(8.dp))
-                        Button(onClick = { onApply(littleMin, littleMax, littleGov, bigMin, bigMax, bigGov) }) {
+                        Button(onClick = {
+                            onApply(clusterConfigs.mapNotNull { selections[it.id] })
+                        }) {
                             Text("Apply", fontWeight = FontWeight.Bold)
                         }
                     }
