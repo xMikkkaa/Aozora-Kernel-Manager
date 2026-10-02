@@ -70,6 +70,8 @@ fn main() {
 
     let pid_path = config::AUTD_DIR.to_owned() + "/xaozora_daemon.pid";
     config::ensure_app_dir();
+    xaozora_rupture::optimize_boot_tune();
+    xaozora_rupture::write_info_json();
 
     if let Ok(existing_pid_str) = fs::read_to_string(&pid_path)
         && let Ok(pid) = existing_pid_str.trim().parse::<i32>()

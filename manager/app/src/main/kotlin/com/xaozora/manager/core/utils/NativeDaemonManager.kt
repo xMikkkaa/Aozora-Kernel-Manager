@@ -16,6 +16,7 @@ object NativeDaemonManager {
     private const val DAEMON_FILENAME = "xaozora_daemon"
     private const val TAG = "NativeDaemonManager"
     private val daemonMutex = Mutex()
+    private val ruptureBinaries = listOf("powersave", "balance", "gaming", "gaming2", "performance", "cachecleaner")
 
     private fun suCmd(cmd: String): Boolean {
         return try {
@@ -63,6 +64,8 @@ object NativeDaemonManager {
 
     suspend fun extractAndStartDaemon(context: Context, enableAutd: Boolean? = null) = withContext(Dispatchers.IO) {
         daemonMutex.withLock {
+            extractRuptureBinaries(context)
+
             val daemonFile = File(context.filesDir, DAEMON_FILENAME)
             
             val prefs = context.getSharedPreferences("aozora_prefs", Context.MODE_PRIVATE)
@@ -132,6 +135,34 @@ object NativeDaemonManager {
         val cmd = "pgrep -x $DAEMON_FILENAME"
         val output = suCmdOut(cmd)
         return output.isNotBlank()
+    }
+
+    suspend fun extractRuptureBinaries(context: Context) = withContext(Dispatchers.IO) {
+        val ruptureDir = File(context.filesDir, "xaozora_rupture")
+        ruptureDir.mkdirs()
+
+        for (name in ruptureBinaries) {
+            val target = File(ruptureDir, name)
+            try {
+                val bundled = context.assets.open("xaozora_rupture/$name").use { sha256(it) }
+                val current = if (target.exists()) {
+                    target.inputStream().use { sha256(it) }
+                } else null
+
+                if (bundled == null || !bundled.contentEquals(current)) {
+                    val tmpFile = File(ruptureDir, "${name}_tmp")
+                    context.assets.open("xaozora_rupture/$name").use { input ->
+                        FileOutputStream(tmpFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    suCmd("rm -f ${target.absolutePath}; mv ${tmpFile.absolutePath} ${target.absolutePath}")
+                }
+                suCmd("chmod 755 ${target.absolutePath}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to extract rupture binary: $name", e)
+            }
+        }
     }
 
     fun isAutdArmed(): Boolean {

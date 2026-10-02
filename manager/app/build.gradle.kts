@@ -42,8 +42,9 @@ android {
         minSdk = 29
         //noinspection OldTargetApi
         targetSdk = 36
+        val ciSuffix = project.findProperty("ciVersionSuffix") as String? ?: ""
         versionCode = 2
-        versionName = "2.7.1"
+        versionName = "2.7.1" + ciSuffix
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -84,6 +85,10 @@ val rustProjectDir = rootProject.file("rust/xaozora_daemon")
 val rustOutputBinary = rootProject.file("rust/xaozora_daemon/target/aarch64-linux-android/release/xaozora_daemon")
 val assetsOutputDir = file("src/main/assets")
 val jniLibsDir = file("src/main/libs")
+
+val ruptureProjectDir = rootProject.file("rust/xaozora_rupture")
+val ruptureOutputDir = rootProject.file("rust/xaozora_rupture/target/aarch64-linux-android/release")
+val ruptureBinaries = listOf("powersave", "balance", "gaming", "gaming2", "performance", "cachecleaner")
 
 val ndkDir: String by lazy {
     val envNdk = System.getenv("ANDROID_NDK_HOME")
@@ -150,6 +155,30 @@ tasks.register<Copy>("copyRustDaemonToAssets") {
     into(assetsOutputDir)
 }
 
+tasks.register<Exec>("buildRustRupture") {
+    group = "rust"
+    description = "Compiles the Rust xaozora_rupture binaries for aarch64-linux-android"
+
+    workingDir = ruptureProjectDir
+    environment("ANDROID_NDK_HOME", ndkDir)
+
+    commandLine("cargo", "ndk", "-t", "arm64-v8a", "build", "--release", "--bins")
+
+    inputs.dir(ruptureProjectDir.resolve("src"))
+    inputs.file(ruptureProjectDir.resolve("Cargo.toml"))
+    inputs.file(ruptureProjectDir.resolve("Cargo.lock"))
+    outputs.dir(ruptureOutputDir)
+}
+
+tasks.register<Copy>("copyRuptureToAssets") {
+    group = "rust"
+    description = "Copies the compiled rupture binaries to the Android assets folder"
+    dependsOn("buildRustRupture")
+
+    from(ruptureOutputDir) { include(ruptureBinaries) }
+    into("$assetsOutputDir/xaozora_rupture")
+}
+
 afterEvaluate {
     tasks.matching { 
         it.name.matches(Regex("merge(Debug|Release)Assets")) ||
@@ -157,6 +186,7 @@ afterEvaluate {
         it.name.matches(Regex("generate(Debug|Release)LintVitalReportModel"))
     }.configureEach {
         dependsOn("copyRustDaemonToAssets")
+        dependsOn("copyRuptureToAssets")
     }
 
     tasks.matching {

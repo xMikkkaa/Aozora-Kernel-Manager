@@ -33,11 +33,11 @@ sealed class Screen(val title: String, val icon: ImageVector) {
 }
 
 @Composable
-fun getAvailableScreens(isAutdAvailable: Boolean, isModuleInstalled: Boolean): List<Screen> {
-    return remember(isAutdAvailable, isModuleInstalled) {
+fun getAvailableScreens(isAutdAvailable: Boolean): List<Screen> {
+    return remember(isAutdAvailable) {
         mutableListOf<Screen>().apply {
             add(Screen.Home)
-            if (isModuleInstalled) add(Screen.Tuning)
+            add(Screen.Tuning)
             add(Screen.Tweaks)
             if (isAutdAvailable) add(Screen.AppManager)
             add(Screen.Settings)

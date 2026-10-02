@@ -20,5 +20,6 @@ autd_reference/
 flutter_reference/
 rust/xaozora_daemon/target
 rust/xaozora_jni/target
+rust/xaozora_rupture/target
 *.patch
 manager/app/release/

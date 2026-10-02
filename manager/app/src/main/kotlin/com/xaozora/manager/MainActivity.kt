@@ -98,7 +98,6 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             val themeMode by themeManager.themeMode.collectAsState()
             var isAutdAvailable by remember { mutableStateOf(false) }
-            var isModuleInstalled by remember { mutableStateOf(false) }
             var showUpdateDialog by remember { mutableStateOf(false) }
             var updateCheckResult by remember { mutableStateOf<UpdateCheckResult?>(null) }
             var appVersion by remember { mutableStateOf("") }
@@ -159,11 +158,6 @@ class MainActivity : ComponentActivity() {
                     com.xaozora.manager.core.utils.NativeDaemonManager.extractAndStartDaemon(context)
 
                     isAutdAvailable = RootShellHelper.checkFileExists("${context.filesDir.path}/xaozora_daemon") && prefs.getBoolean("autd_enabled", true)
-                    
-                    val propOutput = RootShellHelper.executeCmdAndGetOutput(
-                        "grep -l 'id=.*aozora' /data/adb/modules/*/module.prop 2>/dev/null"
-                    )
-                    isModuleInstalled = propOutput.isNotBlank()
 
                     if (!MonitorService.isServiceRunning) {
                         try {
@@ -213,7 +207,7 @@ class MainActivity : ComponentActivity() {
                             onExit = { finishAffinity() }
                         )
                     } else {
-                    val screens = getAvailableScreens(isAutdAvailable, isModuleInstalled)
+                    val screens = getAvailableScreens(isAutdAvailable)
                     val pagerState = rememberPagerState(pageCount = { screens.size })
                     val coroutineScope = rememberCoroutineScope()
 

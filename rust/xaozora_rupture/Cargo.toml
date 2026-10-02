@@ -1,0 +1,42 @@
+[package]
+name = "xaozora_rupture"
+version = "1.0.0"
+edition = "2024"
+
+[lib]
+name = "xaozora_rupture"
+path = "src/lib.rs"
+
+[[bin]]
+name = "powersave"
+path = "src/bin/powersave.rs"
+
+[[bin]]
+name = "balance"
+path = "src/bin/balance.rs"
+
+[[bin]]
+name = "gaming"
+path = "src/bin/gaming.rs"
+
+[[bin]]
+name = "gaming2"
+path = "src/bin/gaming2.rs"
+
+[[bin]]
+name = "performance"
+path = "src/bin/performance.rs"
+
+[[bin]]
+name = "cachecleaner"
+path = "src/bin/cachecleaner.rs"
+
+[dependencies]
+serde_json = "1.0"
+
+[profile.release]
+strip = true
+lto = true
+opt-level = "z"
+codegen-units = 1
+panic = "abort"
