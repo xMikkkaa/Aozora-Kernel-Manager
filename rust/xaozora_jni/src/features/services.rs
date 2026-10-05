@@ -16,11 +16,7 @@ pub fn get_active_profile() -> String {
 }
 
 pub fn get_available_profiles() -> Vec<String> {
-    let mut profiles = vec![
-        "powersave".to_string(),
-        "balance".to_string(),
-        "performance".to_string(),
-    ];
+    let mut profiles = vec!["powersave".to_string(), "balance".to_string()];
 
     if check_file_exists("/system/bin/gaming") {
         profiles.push("gaming".to_string());
@@ -28,6 +24,7 @@ pub fn get_available_profiles() -> Vec<String> {
     if check_file_exists("/system/bin/gaming2") {
         profiles.push("gaming2".to_string());
     }
+    profiles.push("performance".to_string());
 
     profiles
 }
