@@ -381,38 +381,61 @@ pub fn poll_hardware() -> RealTimeMetrics {
     }
 
     // GPU Load & Freq
-    let g_load_str = read_system_file("/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage")
-        .trim()
-        .to_string();
-    let mut raw_load_pct = g_load_str
-        .replace("%", "")
-        .trim()
-        .parse::<f32>()
-        .unwrap_or(0.0);
+    let mut raw_load_pct = 0.0;
+    let load_paths = [
+        "/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage",
+        "/sys/class/kgsl/kgsl-3d0/gpuload",
+        "/sys/class/kgsl/kgsl-3d0/devfreq/gpu_load",
+        "/sys/kernel/gpu/gpu_busy",
+        "/sys/class/devfreq/gpufreq/mali_ondemand/utilisation",
+        "/sys/kernel/debug/ged/hal/gpu_utilization",
+        "/sys/kernel/ged/hal/gpu_utilization",
+        "/sys/module/ged/parameters/gpu_loading",
+        "/sys/devices/gpu.0/load",
+    ];
 
-    let mut g_freq_val = read_system_file("/sys/class/kgsl/kgsl-3d0/gpuclk")
-        .trim()
-        .parse::<u64>()
-        .unwrap_or(0);
-    if g_freq_val == 0 {
-        g_freq_val = read_system_file("/sys/class/kgsl/kgsl-3d0/devfreq/cur_freq")
-            .trim()
-            .parse::<u64>()
-            .unwrap_or(0);
+    for path in load_paths {
+        let val = read_system_file(path);
+        let val = val.trim();
+        if !val.is_empty() {
+            let first_part = val.split_whitespace().next().unwrap_or("0");
+            let mut parsed = first_part.replace('%', "").parse::<f32>().unwrap_or(0.0);
+            // Tegra /sys/devices/gpu.0/load returns value * 10 (1000 = 100%)
+            if path.contains("gpu.0/load") {
+                parsed /= 10.0;
+            }
+            raw_load_pct = parsed;
+            break;
+        }
     }
 
-    let mut max_freq_val = read_system_file("/sys/class/kgsl/kgsl-3d0/max_gpuclk")
-        .trim()
-        .parse::<u64>()
-        .unwrap_or(0);
-    if max_freq_val == 0 {
-        max_freq_val = read_system_file("/sys/class/kgsl/kgsl-3d0/devfreq/max_freq")
-            .trim()
-            .parse::<u64>()
-            .unwrap_or(0);
+    let mut g_freq_val = 0u64;
+    let freq_paths = [
+        "/sys/class/kgsl/kgsl-3d0/gpuclk",
+        "/sys/class/kgsl/kgsl-3d0/devfreq/cur_freq",
+        "/sys/kernel/gpu/gpu_clock",
+        "/sys/kernel/debug/ged/hal/current_freqency",
+        "/sys/kernel/ged/hal/current_freqency",
+        "/sys/devices/gpu.0/devfreq/gp10b/cur_freq",
+    ];
+
+    for path in freq_paths {
+        let val = read_system_file(path);
+        let val = val.trim();
+        if !val.is_empty() {
+            let parts: Vec<&str> = val.split_whitespace().collect();
+            let parsed = if parts.len() > 1 && path.contains("ged") {
+                parts[1].parse::<u64>().unwrap_or(0)
+            } else {
+                parts[0].parse::<u64>().unwrap_or(0)
+            };
+
+            g_freq_val = parsed;
+            break;
+        }
     }
 
-    if g_freq_val == 0 && max_freq_val == 0 {
+    if g_freq_val == 0 && raw_load_pct == 0.0 {
         let devfreq_gpu = execute_cmd_and_get_output(
             "ls /sys/class/devfreq 2>/dev/null | grep -m1 'mali\\|\\.gpu'",
         );
@@ -420,10 +443,6 @@ pub fn poll_hardware() -> RealTimeMetrics {
         if !devfreq_gpu.is_empty() {
             let base = format!("/sys/class/devfreq/{}", devfreq_gpu);
             g_freq_val = read_system_file(&format!("{}/cur_freq", base))
-                .trim()
-                .parse::<u64>()
-                .unwrap_or(0);
-            max_freq_val = read_system_file(&format!("{}/max_freq", base))
                 .trim()
                 .parse::<u64>()
                 .unwrap_or(0);
@@ -440,7 +459,7 @@ pub fn poll_hardware() -> RealTimeMetrics {
         }
     }
 
-    if g_freq_val == 0 && max_freq_val == 0 {
+    if g_freq_val == 0 && raw_load_pct == 0.0 {
         let mali_dir =
             execute_cmd_and_get_output("ls -d /sys/devices/platform/*mali* 2>/dev/null | head -1");
         let mali_dir = mali_dir.trim();
@@ -457,36 +476,16 @@ pub fn poll_hardware() -> RealTimeMetrics {
                     .parse::<f32>()
                     .unwrap_or(0.0);
             }
-            if g_freq_val == 0 {
-                let cur_str = read_system_file(&format!("{}/cur_freq", mali_dir))
-                    .trim()
-                    .to_string();
-                if !cur_str.is_empty() {
-                    g_freq_val = cur_str.parse::<u64>().unwrap_or(0);
-                }
-            }
-            if max_freq_val == 0 {
-                let max_str = read_system_file(&format!("{}/max_freq", mali_dir))
-                    .trim()
-                    .to_string();
-                if !max_str.is_empty() {
-                    max_freq_val = max_str.parse::<u64>().unwrap_or(0);
-                }
+            let cur_str = read_system_file(&format!("{}/cur_freq", mali_dir))
+                .trim()
+                .to_string();
+            if !cur_str.is_empty() {
+                g_freq_val = cur_str.parse::<u64>().unwrap_or(0);
             }
         }
     }
 
-    if max_freq_val == 0 {
-        max_freq_val = 710000000;
-    }
-
-    let mut gpu_load = 0.0;
-    if raw_load_pct > 0.0 {
-        gpu_load = (raw_load_pct / 100.0).clamp(0.0, 1.0);
-    } else if max_freq_val > 0 {
-        gpu_load =
-            ((raw_load_pct / 100.0) * (g_freq_val as f32 / max_freq_val as f32)).clamp(0.0, 1.0);
-    }
+    let gpu_load = (raw_load_pct / 100.0).clamp(0.0, 1.0);
     let gpu_freq = if g_freq_val > 0 {
         if g_freq_val > 1000000 {
             format!("{} MHz", g_freq_val / 1000000)

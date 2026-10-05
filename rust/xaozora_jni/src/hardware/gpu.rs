@@ -270,6 +270,51 @@ pub fn apply_gpu_config(
     }
 }
 
+#[no_mangle]
+pub extern "system" fn Java_com_xaozora_manager_core_utils_GpuControlUtils_getGpuConfigJson<
+    'local,
+>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass,
+) -> jstring {
+    env.with_env(|env| -> jni::errors::Result<jstring> {
+        let config = get_gpu_config();
+        let json_str = serde_json::to_string(&config).unwrap_or_else(|_| "{}".to_string());
+        let output = env.new_string(json_str).unwrap();
+        Ok(output.into_raw())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_xaozora_manager_core_utils_GpuControlUtils_applyGpuConfig<
+    'local,
+>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass,
+    min_freq: JString,
+    max_freq: JString,
+    governor: JString,
+    adreno_boost: JString,
+) {
+    env.with_env(|env| -> jni::errors::Result<()> {
+        let min_freq = min_freq.try_to_string(env).unwrap();
+        let max_freq = max_freq.try_to_string(env).unwrap();
+        let governor = governor.try_to_string(env).unwrap();
+
+        let adreno_boost_val: Option<String> = if adreno_boost.is_null() {
+            None
+        } else {
+            Some(adreno_boost.try_to_string(env).unwrap())
+        };
+
+        let adreno_boost_ref = adreno_boost_val.as_deref();
+
+        apply_gpu_config(&min_freq, &max_freq, &governor, adreno_boost_ref);
+        Ok(())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>();
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -319,49 +364,3 @@ mod tests {
 }
 
 // JNI bindings
-
-#[no_mangle]
-pub extern "system" fn Java_com_xaozora_manager_core_utils_GpuControlUtils_getGpuConfigJson<
-    'local,
->(
-    mut env: EnvUnowned<'local>,
-    _class: JClass,
-) -> jstring {
-    env.with_env(|env| -> jni::errors::Result<jstring> {
-        let config = get_gpu_config();
-        let json_str = serde_json::to_string(&config).unwrap_or_else(|_| "{}".to_string());
-        let output = env.new_string(json_str).unwrap();
-        Ok(output.into_raw())
-    })
-    .resolve::<ThrowRuntimeExAndDefault>()
-}
-
-#[no_mangle]
-pub extern "system" fn Java_com_xaozora_manager_core_utils_GpuControlUtils_applyGpuConfig<
-    'local,
->(
-    mut env: EnvUnowned<'local>,
-    _class: JClass,
-    min_freq: JString,
-    max_freq: JString,
-    governor: JString,
-    adreno_boost: JString,
-) {
-    env.with_env(|env| -> jni::errors::Result<()> {
-        let min_freq = min_freq.try_to_string(env).unwrap();
-        let max_freq = max_freq.try_to_string(env).unwrap();
-        let governor = governor.try_to_string(env).unwrap();
-
-        let adreno_boost_val: Option<String> = if adreno_boost.is_null() {
-            None
-        } else {
-            Some(adreno_boost.try_to_string(env).unwrap())
-        };
-
-        let adreno_boost_ref = adreno_boost_val.as_deref();
-
-        apply_gpu_config(&min_freq, &max_freq, &governor, adreno_boost_ref);
-        Ok(())
-    })
-    .resolve::<ThrowRuntimeExAndDefault>();
-}
