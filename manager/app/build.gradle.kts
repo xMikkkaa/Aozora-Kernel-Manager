@@ -44,7 +44,7 @@ android {
         targetSdk = 36
         val ciSuffix = project.findProperty("ciVersionSuffix") as String? ?: ""
         versionCode = 3
-        versionName = "3.0.1" + ciSuffix
+        versionName = "3.1.0" + ciSuffix
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
