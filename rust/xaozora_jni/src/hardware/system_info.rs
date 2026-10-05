@@ -637,9 +637,11 @@ pub extern "system" fn Java_com_xaozora_manager_core_utils_SystemInfoUtils_updat
 
     use std::fs::OpenOptions;
     use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
 
     if let Ok(mut file) = OpenOptions::new()
         .write(true)
+        .custom_flags(libc::O_NONBLOCK)
         .open("/data/data/com.xaozora.manager/files/autd/events.pipe")
     {
         let _ = file.write_all(msg.as_bytes());
