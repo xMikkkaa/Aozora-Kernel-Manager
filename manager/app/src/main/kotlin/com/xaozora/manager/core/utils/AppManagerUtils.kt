@@ -39,7 +39,7 @@ object AppProfiles {
     val Gaming = AppProfile("g", "_g", "gaming", "Gaming")
     val Gaming2 = AppProfile("g2", "_g2", "gaming2", "Gaming 2")
 
-    val all: List<AppProfile> = listOf(Powersave, Balance, Performance, Gaming, Gaming2)
+    val all: List<AppProfile> = listOf(Powersave, Balance, Gaming, Gaming2, Performance)
 
     fun fromCode(code: String): AppProfile? = all.find { it.code == code }
 
