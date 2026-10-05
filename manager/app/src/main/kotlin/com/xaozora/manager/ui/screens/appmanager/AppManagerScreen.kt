@@ -101,8 +101,6 @@ fun AppManagerScreen(
     var configuredApps by remember { mutableStateOf(emptyList<ConfiguredApp>()) }
     var allApps by remember { mutableStateOf(emptyList<AppInfoItem>()) }
     var isLoadingApps by remember { mutableStateOf(true) }
-    var gamingExists by remember { mutableStateOf(false) }
-    var gaming2Exists by remember { mutableStateOf(false) }
 
     var showAddSheet by remember { mutableStateOf(false) }
     var appToEdit by remember { mutableStateOf<ConfiguredApp?>(null) }
@@ -115,14 +113,9 @@ fun AppManagerScreen(
 
     fun refreshApps() {
         scope.launch(Dispatchers.IO) {
-            val gExists = RootShellHelper.checkFileExists("/system/bin/gaming")
-            val g2Exists = RootShellHelper.checkFileExists("/system/bin/gaming2")
-
             val apps = AppManagerUtils.getConfiguredApps(context)
             val correctedApps = apps.map { config ->
-                val needsFallback = !AppProfiles.isSupported(config.mode) ||
-                    (config.mode == "g" && !gExists) ||
-                    (config.mode == "g2" && !g2Exists)
+                val needsFallback = !AppProfiles.isSupported(config.mode)
                 if (needsFallback) {
                     val packageName = config.app.packageName
                         val appListPath = "${context.filesDir.absolutePath}/autd/applist"
@@ -135,8 +128,6 @@ fun AppManagerScreen(
             }
 
             withContext(Dispatchers.Main) {
-                gamingExists = gExists
-                gaming2Exists = g2Exists
                 configuredApps = correctedApps
                 isLoadingApps = false
             }
@@ -341,9 +332,7 @@ fun AppManagerScreen(
                         onRemove = { pkg ->
                             appToEdit = null
                             removeAppFromConfig(pkg)
-                        },
-                        gamingExists = gamingExists,
-                        gaming2Exists = gaming2Exists
+                        }
                     )
                 }
             }
@@ -426,18 +415,16 @@ private fun EditAppSheetContent(
     config: ConfiguredApp,
     hazeState: HazeState,
     onUpdateMode: (String, String) -> Unit,
-    onRemove: (String) -> Unit,
-    gamingExists: Boolean,
-    gaming2Exists: Boolean
+    onRemove: (String) -> Unit
 ) {
     var selectedMode by remember { mutableStateOf(config.mode) }
-    val modes = remember(gamingExists, gaming2Exists) {
-        listOfNotNull(
+    val modes = remember {
+        listOf(
             AppProfiles.Powersave,
             AppProfiles.Balance,
-            AppProfiles.Performance,
-            AppProfiles.Gaming.takeIf { gamingExists },
-            AppProfiles.Gaming2.takeIf { gaming2Exists }
+            AppProfiles.Gaming,
+            AppProfiles.Gaming2,
+            AppProfiles.Performance
         )
     }
     val colorScheme = MaterialTheme.colorScheme
