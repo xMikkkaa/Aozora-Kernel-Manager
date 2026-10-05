@@ -102,7 +102,7 @@ jobs:
 
   build:
     needs: [changes, check-green]
-    if: needs.changes.outputs.skip_version_only != 'true' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.android == 'true') && (github.event_name != 'pull_request' || needs.check-green.outputs.skip != 'true')
+    if: (github.event_name != 'push' || needs.changes.outputs.skip_version_only != 'true') && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.android == 'true') && (github.event_name != 'pull_request' || needs.check-green.outputs.skip != 'true')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
