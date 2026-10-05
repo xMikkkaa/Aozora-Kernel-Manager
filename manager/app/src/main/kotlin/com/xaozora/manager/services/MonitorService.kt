@@ -40,7 +40,7 @@ class MonitorService : Service() {
 
     companion object {
         var isServiceRunning = false
-        private const val CHANNEL_ID = "xAozoraServiceV3"
+        private const val CHANNEL_ID = "xAozoraServiceV4"
         private const val TAG = "MonitorService"
         private var wasCharging = false
     }
@@ -54,13 +54,10 @@ class MonitorService : Service() {
             val action = intent.action
             
             serviceScope.launch {
-                var daemonWasDead = false
                 if (Intent.ACTION_SCREEN_ON == action || Intent.ACTION_USER_PRESENT == action) {
                     if (!com.xaozora.manager.core.utils.NativeDaemonManager.isDaemonRunning()) {
                         Log.d(TAG, "Daemon was dead on screen on, restarting...")
-                        checkAndStartDaemon()
-                        daemonWasDead = true
-                        delay(500)
+                        com.xaozora.manager.core.utils.NativeDaemonManager.extractAndStartDaemon(this@MonitorService)
                     }
                 }
                 
@@ -218,7 +215,7 @@ class MonitorService : Service() {
     private fun createNotification(): Notification {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channel = NotificationChannel(
-            CHANNEL_ID, "Aozora Monitor Service", NotificationManager.IMPORTANCE_MIN
+            CHANNEL_ID, "Aozora Monitor Service", NotificationManager.IMPORTANCE_LOW
         ).apply {
             setShowBadge(false)
         }

@@ -4,6 +4,9 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 
 class BootReceiver : BroadcastReceiver() {
     companion object {
@@ -14,9 +17,16 @@ class BootReceiver : BroadcastReceiver() {
         if (bootCompleted) return
         
         val action = intent.action
-        if (action == Intent.ACTION_BOOT_COMPLETED || action == Intent.ACTION_LOCKED_BOOT_COMPLETED) {
+        if (action == Intent.ACTION_BOOT_COMPLETED) {
             bootCompleted = true
             try {
+                val request = OneTimeWorkRequestBuilder<BootWorker>().build()
+                WorkManager.getInstance(context).enqueueUniqueWork(
+                    "aozora-boot-worker",
+                    ExistingWorkPolicy.REPLACE,
+                    request
+                )
+
                 val prefs = context.getSharedPreferences("aozora_prefs", Context.MODE_PRIVATE)
                 val isMonitorEnabled = prefs.getBoolean("battery_monitor_service", true)
                 val isAutdEnabled = prefs.getBoolean("autd_enabled", true)
