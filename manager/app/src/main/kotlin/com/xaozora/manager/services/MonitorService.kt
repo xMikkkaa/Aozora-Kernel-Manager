@@ -53,23 +53,25 @@ class MonitorService : Service() {
         override fun onReceive(context: Context, intent: Intent) {
             val action = intent.action
             
-            // JNI Update System State
-            try {
-                val bm = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-                val batLevel = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-                val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
-                val isScreenOn = pm.isInteractive
-                com.xaozora.manager.core.utils.SystemInfoUtils.updateSystemState(batLevel, isScreenOn)
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to update JNI System State", e)
-            }
-
-            if (Intent.ACTION_SCREEN_ON == action || Intent.ACTION_USER_PRESENT == action) {
-                serviceScope.launch {
+            serviceScope.launch {
+                var daemonWasDead = false
+                if (Intent.ACTION_SCREEN_ON == action || Intent.ACTION_USER_PRESENT == action) {
                     if (!com.xaozora.manager.core.utils.NativeDaemonManager.isDaemonRunning()) {
                         Log.d(TAG, "Daemon was dead on screen on, restarting...")
                         checkAndStartDaemon()
+                        daemonWasDead = true
+                        delay(500)
                     }
+                }
+                
+                try {
+                    val bm = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+                    val batLevel = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                    val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+                    val isScreenOn = pm.isInteractive
+                    com.xaozora.manager.core.utils.SystemInfoUtils.updateSystemState(batLevel, isScreenOn)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to update JNI System State", e)
                 }
             }
         }
@@ -107,6 +109,16 @@ class MonitorService : Service() {
                 contentResolver.registerContentObserver(uri, false, powerObserver!!)
 
                 updatePowerSaveState()
+                
+                try {
+                    val bm = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+                    val batLevel = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                    val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+                    val isScreenOn = pm.isInteractive
+                    com.xaozora.manager.core.utils.SystemInfoUtils.updateSystemState(batLevel, isScreenOn)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to initialize JNI System State", e)
+                }
 
                 val prefs = getSharedPreferences("aozora_prefs", Context.MODE_PRIVATE)
                 if (prefs.getBoolean("battery_reset_reboot", false)) {
@@ -151,7 +163,15 @@ class MonitorService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "Service onStartCommand")
         startServiceForeground()
-        checkAndStartDaemon()
+        
+        val isFromBoot = intent?.getBooleanExtra("from_boot", false) == true
+        
+        serviceScope.launch {
+            if (isFromBoot) {
+                delay(3000L)
+            }
+            checkAndStartDaemon()
+        }
         return START_STICKY
     }
 
