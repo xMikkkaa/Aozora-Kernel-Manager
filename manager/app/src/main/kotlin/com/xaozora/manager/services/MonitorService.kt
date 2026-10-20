@@ -23,6 +23,7 @@ import android.graphics.drawable.Icon
 import android.os.BatteryManager
 import android.provider.Settings
 import android.util.Log
+import android.widget.Toast
 import com.google.gson.Gson
 import com.xaozora.manager.MainActivity
 import com.xaozora.manager.core.models.BatteryStats
@@ -257,6 +258,7 @@ class MonitorService : Service() {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             
             while (isServiceRunning) {
+                flushDaemonToasts()
                 val isMonitorEnabled = prefs.getBoolean("battery_monitor_service", true)
                 if (isMonitorEnabled) {
                     updateBatteryNotification(nm, prefs)
@@ -264,6 +266,20 @@ class MonitorService : Service() {
                     nm.notify(888, createNotification())
                 }
                 delay(5000L)
+            }
+        }
+    }
+
+    private fun flushDaemonToasts() {
+        val file = java.io.File(filesDir, "autd/toast_queue")
+        if (!file.exists()) return
+        val content = runCatching { file.readText() }.getOrNull() ?: return
+        if (!file.delete()) {
+            RootShellHelper.executeCmd("rm -f ${file.absolutePath}")
+        }
+        content.lineSequence().filter { it.isNotBlank() }.toList().takeLast(3).forEach { msg ->
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             }
         }
     }
