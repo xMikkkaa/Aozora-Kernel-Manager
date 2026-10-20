@@ -65,25 +65,29 @@ fn scan_devfreq(pattern: &str) -> Option<String> {
     }
 }
 
+fn scan_mali_devfreq() -> Option<String> {
+    let out = execute_cmd_and_get_output(
+        "for d in /sys/devices/platform/*mali*/devfreq/*/ /sys/devices/platform/soc/*mali*/devfreq/*/; do [ -f \"$d/available_frequencies\" ] && echo \"$d\" && break; done",
+    );
+    let p = out.trim().trim_end_matches('/');
+    if p.is_empty() {
+        None
+    } else {
+        Some(p.to_string())
+    }
+}
+
+fn devfreq_backend(kind: GpuKind, base: &str) -> GpuBackend {
+    GpuBackend {
+        kind,
+        freq_table: format!("{}/available_frequencies", base),
+        set_min: format!("{}/min_freq", base),
+        set_max: format!("{}/max_freq", base),
+        governor: Some(format!("{}/governor", base)),
+    }
+}
+
 pub fn detect_gpu_backend() -> Option<GpuBackend> {
-    if check_file_exists(&format!("{}/gpu_freq_table", LEGACY_BASE)) {
-        return Some(GpuBackend {
-            kind: GpuKind::SysKernelGpu,
-            freq_table: format!("{}/gpu_freq_table", LEGACY_BASE),
-            set_min: format!("{}/gpu_min_clock", LEGACY_BASE),
-            set_max: format!("{}/gpu_max_clock", LEGACY_BASE),
-            governor: Some(format!("{}/gpu_governor", LEGACY_BASE)),
-        });
-    }
-    if check_file_exists(&format!("{}/gpu_available_frequencies", LEGACY_BASE)) {
-        return Some(GpuBackend {
-            kind: GpuKind::SysKernelGpu,
-            freq_table: format!("{}/gpu_available_frequencies", LEGACY_BASE),
-            set_min: format!("{}/gpu_min_clock", LEGACY_BASE),
-            set_max: format!("{}/gpu_max_clock", LEGACY_BASE),
-            governor: Some(format!("{}/gpu_governor", LEGACY_BASE)),
-        });
-    }
     if check_file_exists(&format!("{}/available_frequencies", LEGACY_DEVFREQ)) {
         return Some(GpuBackend {
             kind: GpuKind::KgslAdreno,
@@ -105,31 +109,40 @@ pub fn detect_gpu_backend() -> Option<GpuBackend> {
             });
         }
     }
+    if let Some(mali) = scan_mali_devfreq() {
+        if check_file_exists(&format!("{}/available_frequencies", mali)) {
+            return Some(devfreq_backend(GpuKind::MaliDevfreq, &mali));
+        }
+    }
     if let Some(node) = scan_devfreq("mali") {
         let base = format!("/sys/class/devfreq/{}", node);
-        let avail = format!("{}/available_frequencies", base);
-        if check_file_exists(&avail) {
-            return Some(GpuBackend {
-                kind: GpuKind::MaliDevfreq,
-                freq_table: avail,
-                set_min: format!("{}/min_freq", base),
-                set_max: format!("{}/max_freq", base),
-                governor: Some(format!("{}/governor", base)),
-            });
+        if check_file_exists(&format!("{}/available_frequencies", base)) {
+            return Some(devfreq_backend(GpuKind::MaliDevfreq, &base));
         }
     }
     if let Some(node) = scan_devfreq("gpu") {
         let base = format!("/sys/class/devfreq/{}", node);
-        let avail = format!("{}/available_frequencies", base);
-        if check_file_exists(&avail) {
-            return Some(GpuBackend {
-                kind: GpuKind::GpuDevfreq,
-                freq_table: avail,
-                set_min: format!("{}/min_freq", base),
-                set_max: format!("{}/max_freq", base),
-                governor: Some(format!("{}/governor", base)),
-            });
+        if check_file_exists(&format!("{}/available_frequencies", base)) {
+            return Some(devfreq_backend(GpuKind::GpuDevfreq, &base));
         }
+    }
+    if check_file_exists(&format!("{}/gpu_freq_table", LEGACY_BASE)) {
+        return Some(GpuBackend {
+            kind: GpuKind::SysKernelGpu,
+            freq_table: format!("{}/gpu_freq_table", LEGACY_BASE),
+            set_min: format!("{}/gpu_min_clock", LEGACY_BASE),
+            set_max: format!("{}/gpu_max_clock", LEGACY_BASE),
+            governor: Some(format!("{}/gpu_governor", LEGACY_BASE)),
+        });
+    }
+    if check_file_exists(&format!("{}/gpu_available_frequencies", LEGACY_BASE)) {
+        return Some(GpuBackend {
+            kind: GpuKind::SysKernelGpu,
+            freq_table: format!("{}/gpu_available_frequencies", LEGACY_BASE),
+            set_min: format!("{}/gpu_min_clock", LEGACY_BASE),
+            set_max: format!("{}/gpu_max_clock", LEGACY_BASE),
+            governor: Some(format!("{}/gpu_governor", LEGACY_BASE)),
+        });
     }
     if check_file_exists("/sys/kernel/tegra_gpu/available_frequencies") {
         return Some(GpuBackend {
@@ -192,7 +205,7 @@ pub fn get_gpu_config() -> GpuConfig {
 
     let available_governors = gov_path
         .as_ref()
-        .map(|p| read_freq_list(p))
+        .map(|p| read_freq_list(&p.replace("governor", "available_governors")))
         .unwrap_or_default();
 
     let min_freq = read_system_file(&min_path);

@@ -67,7 +67,11 @@ pub fn execute_cmd_and_get_output(cmd: &str) -> String {
 }
 
 pub fn read_system_file(path: &str) -> String {
-    execute_cmd_and_get_output(&format!("cat {}", path))
+    let output = execute_cmd_and_get_output(&format!("cat {} 2>/dev/null", path));
+    if output.contains("No such file or directory") || output.contains("Permission denied") {
+        return String::new();
+    }
+    output
 }
 
 pub fn write_system_file(path: &str, value: &str) -> bool {

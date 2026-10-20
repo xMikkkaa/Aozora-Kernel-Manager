@@ -156,7 +156,7 @@ pub fn fetch_system_info() -> SystemInfo {
             .collect::<Vec<&str>>()
             .join(" ")
     } else {
-        "-".to_string()
+        String::new()
     };
 
     let entropy = read_system_file("/proc/sys/kernel/random/entropy_avail")
@@ -173,31 +173,53 @@ pub fn fetch_system_info() -> SystemInfo {
     let wg_version = read_system_file("/sys/module/wireguard/version")
         .trim()
         .to_string();
-    let wireguard = if !wg_version.is_empty() {
-        wg_version
-    } else {
-        "Unsupported".to_string()
-    };
+    let wireguard = wg_version;
 
     let open_gl_output = execute_cmd_and_get_output("dumpsys SurfaceFlinger | grep -i GLES")
         .trim()
         .to_string();
-    let open_gl = if let Some(idx) = open_gl_output.find("GLES:") {
+    let mut open_gl = if let Some(idx) = open_gl_output.find("GLES:") {
         open_gl_output[idx + 5..].trim().to_string()
     } else if !open_gl_output.is_empty() {
         open_gl_output
     } else {
-        "-".to_string()
+        String::new()
     };
+    if open_gl.is_empty() || open_gl == "-" {
+        for path in [
+            "/sys/kernel/gpu/gpu_model",
+            "/sys/class/kgsl/kgsl-3d0/gpu_model",
+            "/proc/gpuinfo",
+        ] {
+            let value = read_system_file(path);
+            let mut candidate = String::new();
+            for line in value.lines() {
+                let line = line.trim();
+                let lower = line.to_lowercase();
+                if lower.contains("mali") || lower.contains("adreno") {
+                    candidate = line
+                        .split(':')
+                        .next_back()
+                        .unwrap_or(line)
+                        .trim()
+                        .to_string();
+                    break;
+                }
+            }
+            if candidate.is_empty() {
+                candidate = value.lines().next().unwrap_or("").trim().to_string();
+            }
+            if !candidate.is_empty() {
+                open_gl = candidate;
+                break;
+            }
+        }
+    }
 
     let gov_str = read_system_file("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
         .trim()
         .to_string();
-    let governor = if !gov_str.is_empty() {
-        gov_str
-    } else {
-        "Unknown".to_string()
-    };
+    let governor = gov_str;
 
     let mut charge_full = 0f32;
     let mut charge_full_design = 0f32;
@@ -217,8 +239,8 @@ pub fn fetch_system_info() -> SystemInfo {
         }
     }
 
-    let mut capacity = "Unknown".to_string();
-    let mut battery_health = "Unknown".to_string();
+    let mut capacity = String::new();
+    let mut battery_health = String::new();
 
     let mut learned_capacity = 0f32;
     if let Ok(content) =
@@ -285,10 +307,15 @@ pub fn fetch_system_info() -> SystemInfo {
             kernel
         },
         uptime: get_uptime(uptime_s),
-        battery: format!(
-            "{}%",
-            read_system_file("/sys/class/power_supply/battery/capacity").trim()
-        ),
+        battery: {
+            let capacity = read_system_file("/sys/class/power_supply/battery/capacity");
+            let capacity = capacity.trim();
+            if capacity.is_empty() {
+                String::new()
+            } else {
+                format!("{}%", capacity)
+            }
+        },
         resolution: execute_cmd_and_get_output("wm size")
             .replace("Physical size: ", "")
             .trim()
@@ -413,6 +440,7 @@ pub fn poll_hardware() -> RealTimeMetrics {
     let freq_paths = [
         "/sys/class/kgsl/kgsl-3d0/gpuclk",
         "/sys/class/kgsl/kgsl-3d0/devfreq/cur_freq",
+        "/sys/class/devfreq/gpufreq/cur_freq",
         "/sys/kernel/gpu/gpu_clock",
         "/sys/kernel/debug/ged/hal/current_freqency",
         "/sys/kernel/ged/hal/current_freqency",
@@ -435,27 +463,26 @@ pub fn poll_hardware() -> RealTimeMetrics {
         }
     }
 
-    if g_freq_val == 0 && raw_load_pct == 0.0 {
+    if g_freq_val == 0 || raw_load_pct == 0.0 {
         let devfreq_gpu = execute_cmd_and_get_output(
-            "ls /sys/class/devfreq 2>/dev/null | grep -m1 'mali\\|\\.gpu'",
+            "ls /sys/class/devfreq 2>/dev/null | grep -m1 'mali\\|gpu\\|\\.gpu'",
         );
         let devfreq_gpu = devfreq_gpu.trim();
         if !devfreq_gpu.is_empty() {
             let base = format!("/sys/class/devfreq/{}", devfreq_gpu);
-            g_freq_val = read_system_file(&format!("{}/cur_freq", base))
-                .trim()
-                .parse::<u64>()
-                .unwrap_or(0);
-            let load_str = read_system_file(&format!("{}/load", base))
-                .trim()
-                .to_string();
-            raw_load_pct = load_str
-                .split_whitespace()
-                .next()
-                .unwrap_or("0")
-                .trim_end_matches('%')
-                .parse::<f32>()
-                .unwrap_or(0.0);
+            if g_freq_val == 0 {
+                g_freq_val = read_system_file(&format!("{}/cur_freq", base))
+                    .trim()
+                    .parse::<u64>()
+                    .unwrap_or(0);
+            }
+            if raw_load_pct == 0.0 {
+                let load_str = read_system_file(&format!("{}/load", base));
+                let load_str = load_str.split_whitespace().next().unwrap_or("");
+                if !load_str.is_empty() {
+                    raw_load_pct = load_str.trim_end_matches('%').parse::<f32>().unwrap_or(0.0);
+                }
+            }
         }
     }
 
