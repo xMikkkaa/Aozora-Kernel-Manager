@@ -34,6 +34,7 @@ pub const AUTD_BYPASS_LIMIT_BACKUP_PATH: &str = "autd/autd_bypass_limit_backup";
 pub const AUTD_AWAKE_DEBUG_LOG: &str = "autd/autd_awake_method.info";
 pub const GAME_MODE_DIR: &str = "/dev/cpuset/game-mode";
 pub const AUTD_EVENT_PIPE: &str = "autd/events.pipe";
+pub const AUTD_TOAST_QUEUE_PATH: &str = "autd/toast_queue";
 pub const AUTD_HYDRA_ENABLE_PATH: &str = "autd/autd_hydra_enable";
 
 pub const KERNEL_HYDRA_PID_PATH: &str = "/proc/sys/kernel/hydra_pid";
