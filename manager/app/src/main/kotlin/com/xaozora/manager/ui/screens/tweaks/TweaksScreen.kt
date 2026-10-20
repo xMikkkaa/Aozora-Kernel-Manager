@@ -79,6 +79,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
+private const val CUSTOM_BYPASS_NODE = "/sys/kernel/bypass_charge/bypass_charging"
+private const val DEFAULT_BYPASS_NODE = "/sys/class/power_supply/battery/input_suspend"
+private const val CURRENT_LIMIT_NODE = "/sys/class/power_supply/battery/constant_charge_current_max"
+private const val CURRENT_LIMIT_VALUE = "100000"
+private const val MANUAL_BYPASS_BACKUP = "autd/manual_bypass_backup"
+
 @Composable
 fun TweaksScreen(
     hazeState: HazeState,
@@ -154,22 +160,18 @@ fun TweaksScreen(
             
             isHydraSupported = RootShellHelper.checkFileExists("/proc/sys/kernel/hydra_pid")
             
-            val procVersion = RootShellHelper.executeCmdAndGetOutput("cat /proc/version").lowercase()
-            val isAozora = procVersion.contains("aozora-v9") || procVersion.contains("aozora-v10")
-            val bypassChargingNode = "/sys/kernel/bypass_charge/bypass_charging"
-            
-            if (isAozora) {
-                isSupportedKernel = true
-                bypassNode = "/sys/class/power_supply/battery/input_suspend"
-            } else if (RootShellHelper.checkFileExists(bypassChargingNode)) {
-                isSupportedKernel = true
-                bypassNode = bypassChargingNode
-            } else {
-                isSupportedKernel = false
+            val customBypassNode = CUSTOM_BYPASS_NODE
+            val defaultBypassNode = DEFAULT_BYPASS_NODE
+            bypassNode = when {
+                RootShellHelper.checkFileExists(customBypassNode) -> customBypassNode
+                RootShellHelper.checkFileExists(defaultBypassNode) -> defaultBypassNode
+                else -> ""
             }
+            isSupportedKernel = bypassNode.isNotEmpty()
 
             if (isSupportedKernel) {
-                manualBypassCharging = RootShellHelper.readSystemFile(bypassNode).trim() == "1"
+                manualBypassCharging = RootShellHelper.readSystemFile(bypassNode).trim() == "1" ||
+                    java.io.File(context.filesDir, MANUAL_BYPASS_BACKUP).exists()
             }
 
             val autdDir = java.io.File(context.filesDir, "autd")
@@ -178,13 +180,7 @@ fun TweaksScreen(
             chargeStopLevel = savedStop.coerceIn(30, 100)
             val savedResume = try { java.io.File(autdDir, "autd_charge_limit_resume").readText().trim().toIntOrNull() } catch (e: Exception) { null } ?: (chargeStopLevel - 5)
             chargeResumeLevel = savedResume.coerceIn(20, chargeStopLevel - 1)
-            isChargeControlSupported = listOf(
-                "/sys/class/power_supply/battery/input_suspend",
-                "/sys/class/qcom-battery/input_suspend",
-                "/sys/kernel/bypass_charge/bypass_charging",
-                "/sys/class/power_supply/battery/battery_charging_enabled",
-                "/sys/class/power_supply/battery/constant_charge_current_max"
-            ).any { RootShellHelper.checkFileExists(it) }
+            isChargeControlSupported = RootShellHelper.checkFileExists(defaultBypassNode)
         }
         if (lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
             while (true) {
@@ -461,8 +457,10 @@ fun TweaksScreen(
                                     if (newVal) "1" else "0"
                                 )
                                 if (written) {
-                                    if (newVal && manualBypassCharging && bypassNode.isNotEmpty()) {
-                                        RootShellHelper.writeSystemFile(bypassNode, "0")
+                                    if (newVal && manualBypassCharging) {
+                                        if (bypassNode.isNotEmpty()) {
+                                            disableManualBypass(context, bypassNode)
+                                        }
                                         manualBypassCharging = false
                                     }
                                     chargeControlEnabled = newVal
@@ -544,7 +542,12 @@ fun TweaksScreen(
                     hazeState = hazeState,
                     onCheckedChange = { newVal ->
                         scope.launch(Dispatchers.IO) {
-                            if (RootShellHelper.writeSystemFile(bypassNode, if (newVal) "1" else "0")) {
+                            val success = if (newVal) {
+                                enableManualBypass(context, bypassNode)
+                            } else {
+                                disableManualBypass(context, bypassNode)
+                            }
+                            if (success) {
                                 manualBypassCharging = newVal
                                 scope.launch {
                                     val status = if (newVal) "Enabled" else "Disabled"
@@ -565,6 +568,43 @@ fun TweaksScreen(
             Spacer(modifier = Modifier.navigationBarsPadding())
         }
     }
+}
+
+private suspend fun enableManualBypass(context: android.content.Context, bypassNode: String): Boolean {
+    if (!RootShellHelper.writeSystemFile(bypassNode, "1")) return false
+
+    if (bypassNode == DEFAULT_BYPASS_NODE) {
+        delay(1500)
+        val status = RootShellHelper.executeCmdAndGetOutput("cat /sys/class/power_supply/battery/status").trim()
+        if (status == "Discharging") {
+            RootShellHelper.writeSystemFile(bypassNode, "0")
+            val original = RootShellHelper.readSystemFile(CURRENT_LIMIT_NODE).trim()
+            if (original.isNotEmpty()) {
+                val backup = java.io.File(context.filesDir, MANUAL_BYPASS_BACKUP)
+                val saved = runCatching {
+                    backup.parentFile?.mkdirs()
+                    backup.writeText(original)
+                }.isSuccess
+                if (saved) {
+                    RootShellHelper.writeSystemFile(CURRENT_LIMIT_NODE, CURRENT_LIMIT_VALUE)
+                }
+            }
+        }
+    }
+
+    return true
+}
+
+private fun disableManualBypass(context: android.content.Context, bypassNode: String): Boolean {
+    val backup = java.io.File(context.filesDir, MANUAL_BYPASS_BACKUP)
+    if (backup.exists()) {
+        val original = runCatching { backup.readText().trim() }.getOrElse { "" }
+        val restored = original.isEmpty() || RootShellHelper.writeSystemFile(CURRENT_LIMIT_NODE, original)
+        backup.delete()
+        return restored
+    }
+
+    return RootShellHelper.writeSystemFile(bypassNode, "0")
 }
 
 @Composable
