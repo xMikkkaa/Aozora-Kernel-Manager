@@ -112,11 +112,16 @@ fun SystemInfoDialog(
     }
 }
 
+private fun isInfoValue(value: String): Boolean =
+    value.isNotBlank() &&
+        value != "-" &&
+        value != "Unknown" &&
+        !value.contains("No such file") &&
+        !value.contains("Permission denied")
+
 @Composable
-private fun SystemInfoRow(label: String, value: String) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
-    ) {
+private fun InfoColumn(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
         Text(text = label, style = MaterialTheme.typography.labelMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
         Spacer(modifier = Modifier.height(2.dp))
         Text(text = value, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary))
@@ -124,20 +129,23 @@ private fun SystemInfoRow(label: String, value: String) {
 }
 
 @Composable
+private fun SystemInfoRow(label: String, value: String) {
+    if (isInfoValue(value)) {
+        InfoColumn(label = label, value = value, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp))
+    }
+}
+
+@Composable
 private fun SystemInfoDoubleRow(label1: String, value1: String, label2: String, value2: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = label1, style = MaterialTheme.typography.labelMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(text = value1, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary))
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = label2, style = MaterialTheme.typography.labelMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(text = value2, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary))
+    val show1 = isInfoValue(value1)
+    val show2 = isInfoValue(value2)
+    if (show1 || show2) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            if (show1) InfoColumn(label = label1, value = value1, modifier = Modifier.weight(1f))
+            if (show2) InfoColumn(label = label2, value = value2, modifier = Modifier.weight(1f))
         }
     }
 }

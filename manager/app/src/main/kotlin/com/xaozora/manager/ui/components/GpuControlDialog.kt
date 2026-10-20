@@ -237,10 +237,11 @@ private fun AdrenoBoostSelector(
 }
 
 private fun formatGpuFreq(value: String): String {
-    val freq = value.toLongOrNull()
-    return if (freq != null) {
-        "$freq MHz"
-    } else {
-        value
+    val freq = value.toLongOrNull() ?: return value
+    val mhz = when {
+        freq >= 1_000_000 -> freq / 1_000_000
+        freq >= 1_000 -> freq / 1_000
+        else -> freq
     }
+    return "$mhz MHz"
 }
