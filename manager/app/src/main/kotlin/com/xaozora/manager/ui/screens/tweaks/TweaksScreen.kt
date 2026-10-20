@@ -27,11 +27,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BatteryChargingFull
+import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.Games
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.HorizontalDivider
@@ -65,6 +67,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.foundation.layout.navigationBarsPadding
 import com.xaozora.manager.core.shell.RootShellHelper
+import com.xaozora.manager.core.utils.SystemInfoUtils
 import com.xaozora.manager.ui.components.GlassCard
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
@@ -74,6 +77,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 @Composable
 fun TweaksScreen(
@@ -97,7 +101,22 @@ fun TweaksScreen(
     var bypassNode by remember { mutableStateOf("") }
     var manualBypassCharging by remember { mutableStateOf(false) }
 
+    var isChargeControlSupported by remember { mutableStateOf(false) }
+    var chargeControlEnabled by remember { mutableStateOf(false) }
+    var chargeStopLevel by remember { mutableIntStateOf(80) }
+    var chargeResumeLevel by remember { mutableIntStateOf(75) }
+
     var showFlushDialog by remember { mutableStateOf(false) }
+
+    suspend fun nudgeChargeDaemon() = withContext(Dispatchers.IO) {
+        try {
+            val batteryManager = context.getSystemService(android.content.Context.BATTERY_SERVICE) as android.os.BatteryManager
+            val level = batteryManager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            val powerManager = context.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+            SystemInfoUtils.updateSystemState(level, powerManager.isInteractive)
+        } catch (e: Exception) {
+        }
+    }
 
     suspend fun fetchRamStats() = withContext(Dispatchers.IO) {
         val meminfo = try { java.io.File("/proc/meminfo").readText() } catch (e: Exception) { "" }
@@ -152,6 +171,20 @@ fun TweaksScreen(
             if (isSupportedKernel) {
                 manualBypassCharging = RootShellHelper.readSystemFile(bypassNode).trim() == "1"
             }
+
+            val autdDir = java.io.File(context.filesDir, "autd")
+            chargeControlEnabled = try { java.io.File(autdDir, "autd_charge_limit_enable").readText().trim() == "1" } catch (e: Exception) { false }
+            val savedStop = try { java.io.File(autdDir, "autd_charge_limit_stop").readText().trim().toIntOrNull() } catch (e: Exception) { null } ?: 80
+            chargeStopLevel = savedStop.coerceIn(30, 100)
+            val savedResume = try { java.io.File(autdDir, "autd_charge_limit_resume").readText().trim().toIntOrNull() } catch (e: Exception) { null } ?: (chargeStopLevel - 5)
+            chargeResumeLevel = savedResume.coerceIn(20, chargeStopLevel - 1)
+            isChargeControlSupported = listOf(
+                "/sys/class/power_supply/battery/input_suspend",
+                "/sys/class/qcom-battery/input_suspend",
+                "/sys/kernel/bypass_charge/bypass_charging",
+                "/sys/class/power_supply/battery/battery_charging_enabled",
+                "/sys/class/power_supply/battery/constant_charge_current_max"
+            ).any { RootShellHelper.checkFileExists(it) }
         }
         if (lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
             while (true) {
@@ -408,6 +441,68 @@ fun TweaksScreen(
                         }
                     }
                 )
+                if (isChargeControlSupported) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    CustomToggleCard(
+                        title = "Charging Control",
+                        subtitle = if (chargeControlEnabled) {
+                            "Pauses charging at $chargeStopLevel% and resumes at $chargeResumeLevel%."
+                        } else {
+                            "Pause charging at your chosen battery level."
+                        },
+                        icon = Icons.Rounded.BatterySaver,
+                        checked = chargeControlEnabled,
+                        hazeState = hazeState,
+                        showExpandableWhenOff = true,
+                        onCheckedChange = { newVal ->
+                            scope.launch(Dispatchers.IO) {
+                                val written = RootShellHelper.writeSystemFile(
+                                    "${context.filesDir.path}/autd/autd_charge_limit_enable",
+                                    if (newVal) "1" else "0"
+                                )
+                                if (written) {
+                                    if (newVal && manualBypassCharging && bypassNode.isNotEmpty()) {
+                                        RootShellHelper.writeSystemFile(bypassNode, "0")
+                                        manualBypassCharging = false
+                                    }
+                                    chargeControlEnabled = newVal
+                                    nudgeChargeDaemon()
+                                    scope.launch {
+                                        val status = if (newVal) "Enabled" else "Disabled"
+                                        snackbarHostState.showSnackbar("Charging Control $status")
+                                    }
+                                } else {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Failed to toggle Charging Control")
+                                    }
+                                }
+                            }
+                        },
+                        expandableContent = {
+                            ChargeLimitSliders(
+                                stopLevel = chargeStopLevel,
+                                resumeLevel = chargeResumeLevel,
+                                onStopChange = { newStop ->
+                                    chargeStopLevel = newStop.coerceIn(30, 100)
+                                    if (chargeResumeLevel >= chargeStopLevel) {
+                                        chargeResumeLevel = (chargeStopLevel - 5).coerceAtLeast(20)
+                                    }
+                                },
+                                onResumeChange = { newResume ->
+                                    chargeResumeLevel = newResume.coerceIn(20, chargeStopLevel - 1)
+                                },
+                                onCommit = {
+                                    scope.launch(Dispatchers.IO) {
+                                        val dir = "${context.filesDir.path}/autd"
+                                        RootShellHelper.writeSystemFile("$dir/autd_charge_limit_stop", chargeStopLevel.toString())
+                                        RootShellHelper.writeSystemFile("$dir/autd_charge_limit_resume", chargeResumeLevel.toString())
+                                        nudgeChargeDaemon()
+                                    }
+                                }
+                            )
+                        }
+                    )
+                }
                 Spacer(modifier = Modifier.height(12.dp))
                 CustomToggleCard(
                     title = "Bypass Charging While Gaming",
@@ -434,7 +529,7 @@ fun TweaksScreen(
                 Spacer(modifier = Modifier.height(12.dp))
             }
             
-            if (isSupportedKernel) {
+            if (isSupportedKernel && !(isAutdAvailable && chargeControlEnabled)) {
                 if (!isAutdAvailable) {
                     Spacer(modifier = Modifier.height(24.dp))
                     Text("Quick Toggles", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
@@ -480,6 +575,7 @@ private fun CustomToggleCard(
     checked: Boolean,
     hazeState: HazeState,
     onCheckedChange: (Boolean) -> Unit,
+    showExpandableWhenOff: Boolean = false,
     expandableContent: @Composable () -> Unit = {}
 ) {
     val colorScheme = MaterialTheme.colorScheme
@@ -515,10 +611,73 @@ private fun CustomToggleCard(
                         Box(modifier = Modifier.offset(x = switchOffset).size(20.dp).background(thumbColor, CircleShape))
                     }
                 }
-                androidx.compose.animation.AnimatedVisibility(visible = checked) {
+                androidx.compose.animation.AnimatedVisibility(visible = checked || showExpandableWhenOff) {
                     expandableContent()
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ChargeLimitSliders(
+    stopLevel: Int,
+    resumeLevel: Int,
+    onStopChange: (Int) -> Unit,
+    onResumeChange: (Int) -> Unit,
+    onCommit: () -> Unit
+) {
+    val colorScheme = MaterialTheme.colorScheme
+
+    Column(modifier = Modifier.padding(top = 16.dp)) {
+        HorizontalDivider(color = colorScheme.outlineVariant.copy(alpha = 0.5f))
+        Spacer(modifier = Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Stop charging at",
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, color = colorScheme.onSurface)
+            )
+            Text(
+                text = "$stopLevel%",
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, color = colorScheme.primary)
+            )
+        }
+        Slider(
+            value = stopLevel.toFloat(),
+            onValueChange = { onStopChange(it.roundToInt()) },
+            onValueChangeFinished = onCommit,
+            valueRange = 30f..100f,
+            steps = 69
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Resume charging at",
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, color = colorScheme.onSurface)
+            )
+            Text(
+                text = "$resumeLevel%",
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, color = colorScheme.primary)
+            )
+        }
+        Slider(
+            value = resumeLevel.coerceAtMost(stopLevel - 1).toFloat(),
+            onValueChange = { onResumeChange(it.roundToInt()) },
+            onValueChangeFinished = onCommit,
+            valueRange = 20f..(stopLevel - 1).toFloat(),
+            steps = (stopLevel - 22).coerceAtLeast(0)
+        )
+        Text(
+            text = "Keeps the battery between $resumeLevel% and $stopLevel% while plugged in.",
+            style = MaterialTheme.typography.bodySmall.copy(color = colorScheme.onSurfaceVariant)
+        )
     }
 }
