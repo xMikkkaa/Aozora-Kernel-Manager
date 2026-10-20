@@ -103,8 +103,22 @@ jobs:
               echo "keyPassword=$KEY_PASSWORD"
             } > key.properties
           else
-            echo "Error: KEYSTORE_BASE64 missing"
-            exit 1
+            echo "KEYSTORE_BASE64 missing; generating temporary CI keystore"
+            keytool -genkeypair \
+              -keystore manager/app/aozora.jks \
+              -storepass android \
+              -keypass android \
+              -alias ci-temp \
+              -dname "CN=CI,O=Aozora,C=US" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 3650
+            {
+              echo "storeFile=manager/app/aozora.jks"
+              echo "storePassword=android"
+              echo "keyAlias=ci-temp"
+              echo "keyPassword=android"
+            } > key.properties
           fi
 
       - name: Setup Gradle
