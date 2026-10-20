@@ -59,7 +59,6 @@ pub fn run_autd() {
     let mut idle_cycles = 0;
 
     interruptible_sleep(1);
-    monitor::battery::init_backup_once();
     monitor::battery::reset_charging_states();
     monitor::battery::recover_charge_limit_state();
 
