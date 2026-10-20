@@ -18,10 +18,13 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static IS_IDLE_CHARGING_ACTIVE: AtomicBool = AtomicBool::new(false);
+static IS_CHARGE_LIMIT_ACTIVE: AtomicBool = AtomicBool::new(false);
 static ORIGINAL_CURRENTS: Mutex<Option<Vec<(String, String)>>> = Mutex::new(None);
+static ACTIVE_SWITCHES: OnceLock<Vec<&'static ChargeSwitch>> = OnceLock::new();
 
 pub struct ChargeSwitch {
     pub path: &'static str,
@@ -40,6 +43,18 @@ static SWITCH_AOZORA: ChargeSwitch = ChargeSwitch {
     path: "/sys/class/power_supply/battery/input_suspend",
     enable: "0",
     disable: "1",
+    use_max: false,
+};
+static SWITCH_QCOM: ChargeSwitch = ChargeSwitch {
+    path: "/sys/class/qcom-battery/input_suspend",
+    enable: "0",
+    disable: "1",
+    use_max: false,
+};
+static SWITCH_BCE: ChargeSwitch = ChargeSwitch {
+    path: "/sys/class/power_supply/battery/battery_charging_enabled",
+    enable: "1",
+    disable: "0",
     use_max: false,
 };
 static SWITCH_FALLBACK: ChargeSwitch = ChargeSwitch {
@@ -112,8 +127,7 @@ fn get_safe_fallback(path: &Path, default_enable: &str) -> String {
     default_enable.to_string()
 }
 
-pub fn get_active_switches() -> Vec<&'static ChargeSwitch> {
-    let mut active = Vec::new();
+fn detect_active_switches() -> Vec<&'static ChargeSwitch> {
     let proc_version = std::process::Command::new("cat")
         .arg("/proc/version")
         .output()
@@ -125,25 +139,53 @@ pub fn get_active_switches() -> Vec<&'static ChargeSwitch> {
 
     let path_chimera = PathBuf::from(SWITCH_CHIMERA.path);
     let path_aozora = PathBuf::from(SWITCH_AOZORA.path);
+    let path_qcom = PathBuf::from(SWITCH_QCOM.path);
+    let path_bce = PathBuf::from(SWITCH_BCE.path);
     let path_fallback = PathBuf::from(SWITCH_FALLBACK.path);
 
     if is_aozora {
         if path_aozora.exists() {
-            active.push(&SWITCH_AOZORA);
+            vec![&SWITCH_AOZORA]
+        } else if path_qcom.exists() {
+            vec![&SWITCH_QCOM]
+        } else if path_bce.exists() {
+            vec![&SWITCH_BCE]
         } else if path_fallback.exists() {
-            active.push(&SWITCH_FALLBACK);
+            vec![&SWITCH_FALLBACK]
+        } else {
+            Vec::new()
         }
     } else if is_chimera {
         if path_chimera.exists() {
-            active.push(&SWITCH_CHIMERA);
+            vec![&SWITCH_CHIMERA]
+        } else if path_bce.exists() {
+            vec![&SWITCH_BCE]
+        } else if path_qcom.exists() {
+            vec![&SWITCH_QCOM]
         } else if path_fallback.exists() {
-            active.push(&SWITCH_FALLBACK);
+            vec![&SWITCH_FALLBACK]
+        } else {
+            Vec::new()
         }
+    } else if path_bce.exists() {
+        vec![&SWITCH_BCE]
+    } else if path_aozora.exists() {
+        vec![&SWITCH_AOZORA]
+    } else if path_qcom.exists() {
+        vec![&SWITCH_QCOM]
     } else if path_fallback.exists() {
-        active.push(&SWITCH_FALLBACK);
+        vec![&SWITCH_FALLBACK]
+    } else {
+        Vec::new()
     }
+}
 
-    active
+pub fn get_active_switches() -> Vec<&'static ChargeSwitch> {
+    ACTIVE_SWITCHES.get_or_init(detect_active_switches).clone()
+}
+
+pub fn is_idle_charging_active() -> bool {
+    IS_IDLE_CHARGING_ACTIVE.load(Ordering::Relaxed)
 }
 
 fn write_sysfs(path: &PathBuf, val: &str) {
@@ -261,25 +303,166 @@ pub fn reset_charging_states() {
     }
 }
 
-pub fn get_battery_level() -> i32 {
-    if let Ok(bytes) = fs::read("/sys/class/power_supply/battery/capacity") {
-        let mut val = 0;
-        let mut has_digit = false;
+fn read_flag(path: &str) -> bool {
+    fs::read(path).is_ok_and(|bytes| bytes.first() == Some(&b'1'))
+}
 
-        for &b in bytes.iter() {
-            if b.is_ascii_digit() {
-                val = val * 10 + (b - b'0') as i32;
-                has_digit = true;
-            } else if has_digit {
-                break;
+fn read_config_number(path: &str, default: i32) -> i32 {
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|value| value.trim().parse::<i32>().ok())
+        .unwrap_or(default)
+}
+
+fn charge_limit_marker_active() -> bool {
+    read_flag(crate::config::AUTD_CHARGE_LIMIT_STATE_PATH)
+}
+
+fn is_charge_input_suspended() -> bool {
+    get_active_switches()
+        .iter()
+        .any(|sw| fs::read_to_string(sw.path).is_ok_and(|value| value.trim() == sw.disable))
+}
+
+fn set_charge_suspended(suspend: bool) {
+    if suspend {
+        let _ = fs::write(crate::config::AUTD_CHARGE_LIMIT_STATE_PATH, "1");
+    }
+
+    for sw in get_active_switches() {
+        let path = PathBuf::from(sw.path);
+        if suspend {
+            write_sysfs(&path, sw.disable);
+        } else if sw.use_max {
+            let restore = get_safe_fallback(&path, sw.enable);
+            write_sysfs(&path, &restore);
+        } else {
+            write_sysfs(&path, sw.enable);
+        }
+    }
+
+    if suspend {
+        IS_CHARGE_LIMIT_ACTIVE.store(true, Ordering::Relaxed);
+    } else {
+        let _ = fs::write(crate::config::AUTD_CHARGE_LIMIT_STATE_PATH, "0");
+        IS_CHARGE_LIMIT_ACTIVE.store(false, Ordering::Relaxed);
+    }
+}
+
+pub fn is_charger_connected() -> bool {
+    if let Ok(entries) = fs::read_dir("/sys/class/power_supply") {
+        let mut found_online = false;
+
+        for entry in entries.flatten() {
+            if entry.file_name().to_string_lossy() == "battery" {
+                continue;
+            }
+
+            let online_path = entry.path().join("online");
+            if let Ok(value) = fs::read_to_string(&online_path) {
+                found_online = true;
+                if value.trim() == "1" {
+                    return true;
+                }
             }
         }
 
-        if has_digit {
-            return val.clamp(0, 100);
+        if found_online {
+            return false;
         }
     }
-    100
+
+    if let Ok(status) = fs::read_to_string("/sys/class/power_supply/battery/status") {
+        return matches!(status.trim(), "Charging" | "Full" | "Not charging");
+    }
+
+    false
+}
+
+pub fn enforce_charge_limit() {
+    let enabled = read_flag(crate::config::AUTD_CHARGE_LIMIT_ENABLE_PATH);
+    let active = IS_CHARGE_LIMIT_ACTIVE.load(Ordering::Relaxed) || charge_limit_marker_active();
+
+    if is_idle_charging_active() {
+        return;
+    }
+
+    if !enabled {
+        if active {
+            set_charge_suspended(false);
+        }
+        return;
+    }
+
+    let Some(level) = get_battery_level_opt() else {
+        return;
+    };
+
+    if !is_charger_connected() {
+        if active {
+            set_charge_suspended(false);
+        }
+        return;
+    }
+
+    let stop = read_config_number(crate::config::AUTD_CHARGE_LIMIT_STOP_PATH, 80).clamp(30, 100);
+    let resume = read_config_number(
+        crate::config::AUTD_CHARGE_LIMIT_RESUME_PATH,
+        (stop - 5).max(20),
+    )
+    .clamp(20, stop - 1);
+
+    if level >= stop {
+        if !is_charge_input_suspended() {
+            let announce = !active;
+            set_charge_suspended(true);
+            if announce {
+                crate::utils::cmd::send_toast(&format!("Charging paused at {}%", level));
+            }
+        }
+    } else if level <= resume && active {
+        set_charge_suspended(false);
+        crate::utils::cmd::send_toast("Charging resumed");
+    }
+}
+
+pub fn recover_charge_limit_state() {
+    if charge_limit_marker_active() {
+        set_charge_suspended(false);
+    } else {
+        IS_CHARGE_LIMIT_ACTIVE.store(false, Ordering::Relaxed);
+    }
+}
+
+pub fn restore_charge_limit() {
+    if IS_CHARGE_LIMIT_ACTIVE.load(Ordering::Relaxed) || charge_limit_marker_active() {
+        set_charge_suspended(false);
+    }
+}
+
+pub fn get_battery_level_opt() -> Option<i32> {
+    let bytes = fs::read("/sys/class/power_supply/battery/capacity").ok()?;
+    let mut val = 0;
+    let mut has_digit = false;
+
+    for &b in bytes.iter() {
+        if b.is_ascii_digit() {
+            val = val * 10 + (b - b'0') as i32;
+            has_digit = true;
+        } else if has_digit {
+            break;
+        }
+    }
+
+    if has_digit {
+        Some(val.clamp(0, 100))
+    } else {
+        None
+    }
+}
+
+pub fn get_battery_level() -> i32 {
+    get_battery_level_opt().unwrap_or(100)
 }
 
 pub fn is_android_powersave() -> bool {

@@ -31,6 +31,7 @@ pub fn perform_cleanup() -> bool {
     let _ = fs::remove_file(config::AUTD_AWAKE_DEBUG_LOG);
     let _ = fs::remove_file(config::AUTD_PS_STATE_PATH);
     monitor::battery::disable_idle_charging();
+    monitor::battery::restore_charge_limit();
     actually_cleaned
 }
 
@@ -60,6 +61,7 @@ pub fn run_autd() {
     interruptible_sleep(1);
     monitor::battery::init_backup_once();
     monitor::battery::reset_charging_states();
+    monitor::battery::recover_charge_limit_state();
 
     let mut last_hydra_pid: i32 = 0;
     let mut sched_lib_active = false;
@@ -115,6 +117,7 @@ pub fn run_autd() {
                             }
                         }
                     }
+                    monitor::battery::enforce_charge_limit();
                 }
             }
 
@@ -175,6 +178,8 @@ pub fn run_autd() {
         } else {
             monitor::battery::disable_idle_charging();
         }
+
+        monitor::battery::enforce_charge_limit();
 
         if let Some((current_game, chosen_mode, game_pid)) = game_check {
             if last_mode != chosen_mode || last_game != current_game {
