@@ -381,7 +381,7 @@ pub fn tune_net(low_latency: u64, ecn: u64, fastopen: u64, timestamps: u64) {
 
 #[derive(Clone, Copy)]
 pub enum SchedGroup {
-    /// powersave & balance → bfq (MQ) / cfq (SQ)
+    /// powersave & balance → cpq (MQ) / cfq (SQ)
     Power,
     /// performance, gaming, gaming2 → mq-deadline (MQ) / deadline (SQ)
     Performance,
@@ -422,7 +422,7 @@ fn is_mq_kernel() -> bool {
             let scheds = available_schedulers(&entry.path().join("queue"));
             if scheds
                 .iter()
-                .any(|s| s == "mq-deadline" || s == "kyber" || s == "bfq")
+                .any(|s| s == "mq-deadline" || s == "kyber" || s == "bfq" || s == "cpq")
             {
                 return true;
             }
@@ -439,7 +439,7 @@ fn is_mq_kernel() -> bool {
 
 fn select_scheduler(available: &[String], group: SchedGroup, mq: bool) -> Option<String> {
     let prefs: &[&str] = match (group, mq) {
-        (SchedGroup::Power, true) => &["bfq", "mq-deadline", "kyber", "none"],
+        (SchedGroup::Power, true) => &["cpq", "bfq", "mq-deadline", "kyber", "none"],
         (SchedGroup::Power, false) => &["cfq", "deadline", "noop"],
         (SchedGroup::Performance, true) => &["mq-deadline"],
         (SchedGroup::Performance, false) => &["deadline"],
