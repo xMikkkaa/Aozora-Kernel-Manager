@@ -379,15 +379,92 @@ pub fn tune_net(low_latency: u64, ecn: u64, fastopen: u64, timestamps: u64) {
     setvalue(&timestamps.to_string(), "/proc/sys/net/ipv4/tcp_timestamps");
 }
 
-pub fn tune_block_sched(scheduler: &str, rq_affinity: u64) {
+#[derive(Clone, Copy)]
+pub enum SchedGroup {
+    /// powersave & balance → bfq (MQ) / cfq (SQ)
+    Power,
+    /// performance, gaming, gaming2 → mq-deadline (MQ) / deadline (SQ)
+    Performance,
+}
+
+fn is_loop_device(name: &str) -> bool {
+    name.starts_with("loop")
+}
+
+fn available_schedulers(queue: &std::path::Path) -> Vec<String> {
+    fs::read_to_string(queue.join("scheduler"))
+        .map(|s| {
+            s.split_whitespace()
+                .map(|t| t.trim_matches(|c| c == '[' || c == ']').to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn is_mq_kernel() -> bool {
     if let Ok(entries) = fs::read_dir("/sys/block") {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with("loop") {
+            if is_loop_device(&name) {
+                continue;
+            }
+            if entry.path().join("mq").is_dir() {
+                return true;
+            }
+        }
+    }
+    if let Ok(entries) = fs::read_dir("/sys/block") {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if is_loop_device(&name) {
+                continue;
+            }
+            let scheds = available_schedulers(&entry.path().join("queue"));
+            if scheds
+                .iter()
+                .any(|s| s == "mq-deadline" || s == "kyber" || s == "bfq")
+            {
+                return true;
+            }
+            if scheds.iter().any(|s| s == "cfq" || s == "noop") {
+                return false;
+            }
+            if scheds.iter().any(|s| s == "none") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn select_scheduler(available: &[String], group: SchedGroup, mq: bool) -> Option<String> {
+    let prefs: &[&str] = match (group, mq) {
+        (SchedGroup::Power, true) => &["bfq", "mq-deadline", "kyber", "none"],
+        (SchedGroup::Power, false) => &["cfq", "deadline", "noop"],
+        (SchedGroup::Performance, true) => &["mq-deadline"],
+        (SchedGroup::Performance, false) => &["deadline"],
+    };
+    for pref in prefs {
+        if available.iter().any(|a| a == pref) {
+            return Some(pref.to_string());
+        }
+    }
+    None
+}
+
+pub fn tune_block_sched(group: SchedGroup, rq_affinity: u64) {
+    let mq = is_mq_kernel();
+    if let Ok(entries) = fs::read_dir("/sys/block") {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if is_loop_device(&name) {
                 continue;
             }
             let queue = entry.path().join("queue");
-            setvalue(scheduler, queue.join("scheduler").to_str().unwrap_or(""));
+            let available = available_schedulers(&queue);
+            if let Some(scheduler) = select_scheduler(&available, group, mq) {
+                setvalue(&scheduler, queue.join("scheduler").to_str().unwrap_or(""));
+            }
             setvalue(
                 &rq_affinity.to_string(),
                 queue.join("rq_affinity").to_str().unwrap_or(""),

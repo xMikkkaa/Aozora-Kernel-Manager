@@ -19,9 +19,9 @@ pub mod primitives;
 pub mod soc;
 
 use primitives::{
-    apply_cpu_freqs, apply_gpu_freq, apply_gpu_freq_max, compute_cpu_freqs, set_cmd_power_adaptive,
-    set_cpu_gov, set_gpu_freq_gaming, set_hwui_target, set_settings, shell, tune_block_io,
-    tune_block_sched, tune_net, tune_vm_io,
+    SchedGroup, apply_cpu_freqs, apply_gpu_freq, apply_gpu_freq_max, compute_cpu_freqs,
+    set_cmd_power_adaptive, set_cpu_gov, set_gpu_freq_gaming, set_hwui_target, set_settings, shell,
+    tune_block_io, tune_block_sched, tune_net, tune_vm_io,
 };
 use soc::{detect_soc, soc_apply};
 
@@ -71,7 +71,7 @@ pub fn apply_powersave() {
     tune_block_io(1, 1, 128, 128);
     tune_net(0, 2, 1, 1);
     tune_vm_io(100, 3);
-    tune_block_sched("none", 2);
+    tune_block_sched(SchedGroup::Power, 2);
     set_hwui_target(40);
     set_settings("high_priority", "0");
     set_settings("low_priority", "1");
@@ -89,7 +89,7 @@ pub fn apply_balance() {
     tune_block_io(1, 1, 128, 128);
     tune_net(0, 2, 1, 1);
     tune_vm_io(120, 3);
-    tune_block_sched("none", 1);
+    tune_block_sched(SchedGroup::Power, 1);
     set_hwui_target(55);
     set_settings("high_priority", "1");
     set_settings("low_priority", "0");
@@ -107,7 +107,7 @@ pub fn apply_performance() {
     tune_block_io(0, 0, 32, 32);
     tune_net(1, 1, 3, 0);
     tune_vm_io(80, 0);
-    tune_block_sched("none", 1);
+    tune_block_sched(SchedGroup::Performance, 1);
     set_hwui_target(80);
     set_settings("high_priority", "1");
     set_settings("low_priority", "0");
@@ -125,7 +125,7 @@ pub fn apply_gaming() {
     tune_block_io(1, 1, 128, 128);
     tune_net(0, 2, 1, 1);
     tune_vm_io(120, 3);
-    tune_block_sched("none", 1);
+    tune_block_sched(SchedGroup::Performance, 1);
     set_hwui_target(55);
     set_settings("high_priority", "1");
     set_settings("low_priority", "0");
@@ -143,7 +143,7 @@ pub fn apply_gaming2() {
     tune_block_io(0, 0, 32, 32);
     tune_net(1, 1, 3, 0);
     tune_vm_io(80, 0);
-    tune_block_sched("none", 1);
+    tune_block_sched(SchedGroup::Performance, 1);
     set_hwui_target(80);
     set_settings("high_priority", "1");
     set_settings("low_priority", "0");
