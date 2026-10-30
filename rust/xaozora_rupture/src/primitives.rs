@@ -151,6 +151,7 @@ pub struct GpuBackend {
     pub freq_table: String,
     pub set_min: String,
     pub set_max: String,
+    pub governor: Option<String>,
 }
 
 fn path_exists(path: &str) -> bool {
@@ -187,6 +188,7 @@ pub fn detect_gpu_backend() -> Option<GpuBackend> {
             freq_table: "/sys/kernel/gpu/gpu_freq_table".into(),
             set_min: "/sys/kernel/gpu/gpu_min_clock".into(),
             set_max: "/sys/kernel/gpu/gpu_max_clock".into(),
+            governor: Some("/sys/kernel/gpu/gpu_governor".into()),
         });
     }
     if path_exists("/sys/kernel/gpu/gpu_available_frequencies") {
@@ -194,6 +196,7 @@ pub fn detect_gpu_backend() -> Option<GpuBackend> {
             freq_table: "/sys/kernel/gpu/gpu_available_frequencies".into(),
             set_min: "/sys/kernel/gpu/gpu_min_clock".into(),
             set_max: "/sys/kernel/gpu/gpu_max_clock".into(),
+            governor: Some("/sys/kernel/gpu/gpu_governor".into()),
         });
     }
     if path_exists("/sys/class/kgsl/kgsl-3d0/devfreq/available_frequencies") {
@@ -201,6 +204,7 @@ pub fn detect_gpu_backend() -> Option<GpuBackend> {
             freq_table: "/sys/class/kgsl/kgsl-3d0/devfreq/available_frequencies".into(),
             set_min: "/sys/class/kgsl/kgsl-3d0/devfreq/min_freq".into(),
             set_max: "/sys/class/kgsl/kgsl-3d0/devfreq/max_freq".into(),
+            governor: Some("/sys/class/kgsl/kgsl-3d0/devfreq/governor".into()),
         });
     }
     if let Some(mali) = scan_platform_dirs(".mali") {
@@ -210,6 +214,7 @@ pub fn detect_gpu_backend() -> Option<GpuBackend> {
                 freq_table: avail,
                 set_min: format!("{}/scaling_min_freq", mali),
                 set_max: format!("{}/scaling_max_freq", mali),
+                governor: None,
             });
         }
     }
@@ -221,6 +226,7 @@ pub fn detect_gpu_backend() -> Option<GpuBackend> {
                 freq_table: avail,
                 set_min: format!("{}/min_freq", base),
                 set_max: format!("{}/max_freq", base),
+                governor: Some(format!("{}/governor", base)),
             });
         }
     }
@@ -232,6 +238,7 @@ pub fn detect_gpu_backend() -> Option<GpuBackend> {
                 freq_table: avail,
                 set_min: format!("{}/min_freq", base),
                 set_max: format!("{}/max_freq", base),
+                governor: Some(format!("{}/governor", base)),
             });
         }
     }
@@ -240,6 +247,7 @@ pub fn detect_gpu_backend() -> Option<GpuBackend> {
             freq_table: "/sys/kernel/tegra_gpu/available_frequencies".into(),
             set_min: "/sys/kernel/tegra_gpu/gpu_floor_rate".into(),
             set_max: "/sys/kernel/tegra_gpu/gpu_cap_rate".into(),
+            governor: None,
         });
     }
     None
@@ -301,6 +309,19 @@ pub fn apply_gpu_freq_max() {
     if max > 0 {
         setvalue(&max.to_string(), &backend.set_max);
         setvalue(&max.to_string(), &backend.set_min);
+    }
+}
+
+pub fn set_gpu_governor(governor: &str) {
+    let backend = match detect_gpu_backend() {
+        Some(b) => b,
+        None => return,
+    };
+    if let Some(gov) = &backend.governor
+        && !gov.is_empty()
+        && path_exists(gov)
+    {
+        setvalue(governor, gov);
     }
 }
 
