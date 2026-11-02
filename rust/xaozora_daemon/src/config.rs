@@ -26,10 +26,15 @@ pub const AUTD_STATUS_PATH: &str = "autd/autd_status";
 pub const AUTD_OPT_ALLOW_PATH: &str = "autd/autd_opt_allow";
 pub const AUTD_PS_STATE_PATH: &str = "autd/autd_ps_state";
 pub const AUTD_IDLE_CHARGING_PATH: &str = "autd/autd_idle_charging";
-pub const AUTD_SYSFS_BACKUP_PATH: &str = "autd/autd_sysfs_backup";
+pub const AUTD_CHARGE_LIMIT_ENABLE_PATH: &str = "autd/autd_charge_limit_enable";
+pub const AUTD_CHARGE_LIMIT_STOP_PATH: &str = "autd/autd_charge_limit_stop";
+pub const AUTD_CHARGE_LIMIT_RESUME_PATH: &str = "autd/autd_charge_limit_resume";
+pub const AUTD_CHARGE_LIMIT_STATE_PATH: &str = "autd/autd_charge_limit_state";
+pub const AUTD_BYPASS_LIMIT_BACKUP_PATH: &str = "autd/autd_bypass_limit_backup";
 pub const AUTD_AWAKE_DEBUG_LOG: &str = "autd/autd_awake_method.info";
 pub const GAME_MODE_DIR: &str = "/dev/cpuset/game-mode";
 pub const AUTD_EVENT_PIPE: &str = "autd/events.pipe";
+pub const AUTD_TOAST_QUEUE_PATH: &str = "autd/toast_queue";
 pub const AUTD_HYDRA_ENABLE_PATH: &str = "autd/autd_hydra_enable";
 
 pub const KERNEL_HYDRA_PID_PATH: &str = "/proc/sys/kernel/hydra_pid";

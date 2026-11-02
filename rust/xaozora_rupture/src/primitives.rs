@@ -151,6 +151,7 @@ pub struct GpuBackend {
     pub freq_table: String,
     pub set_min: String,
     pub set_max: String,
+    pub governor: Option<String>,
 }
 
 fn path_exists(path: &str) -> bool {
@@ -187,6 +188,7 @@ pub fn detect_gpu_backend() -> Option<GpuBackend> {
             freq_table: "/sys/kernel/gpu/gpu_freq_table".into(),
             set_min: "/sys/kernel/gpu/gpu_min_clock".into(),
             set_max: "/sys/kernel/gpu/gpu_max_clock".into(),
+            governor: Some("/sys/kernel/gpu/gpu_governor".into()),
         });
     }
     if path_exists("/sys/kernel/gpu/gpu_available_frequencies") {
@@ -194,6 +196,7 @@ pub fn detect_gpu_backend() -> Option<GpuBackend> {
             freq_table: "/sys/kernel/gpu/gpu_available_frequencies".into(),
             set_min: "/sys/kernel/gpu/gpu_min_clock".into(),
             set_max: "/sys/kernel/gpu/gpu_max_clock".into(),
+            governor: Some("/sys/kernel/gpu/gpu_governor".into()),
         });
     }
     if path_exists("/sys/class/kgsl/kgsl-3d0/devfreq/available_frequencies") {
@@ -201,6 +204,7 @@ pub fn detect_gpu_backend() -> Option<GpuBackend> {
             freq_table: "/sys/class/kgsl/kgsl-3d0/devfreq/available_frequencies".into(),
             set_min: "/sys/class/kgsl/kgsl-3d0/devfreq/min_freq".into(),
             set_max: "/sys/class/kgsl/kgsl-3d0/devfreq/max_freq".into(),
+            governor: Some("/sys/class/kgsl/kgsl-3d0/devfreq/governor".into()),
         });
     }
     if let Some(mali) = scan_platform_dirs(".mali") {
@@ -210,6 +214,7 @@ pub fn detect_gpu_backend() -> Option<GpuBackend> {
                 freq_table: avail,
                 set_min: format!("{}/scaling_min_freq", mali),
                 set_max: format!("{}/scaling_max_freq", mali),
+                governor: None,
             });
         }
     }
@@ -221,6 +226,7 @@ pub fn detect_gpu_backend() -> Option<GpuBackend> {
                 freq_table: avail,
                 set_min: format!("{}/min_freq", base),
                 set_max: format!("{}/max_freq", base),
+                governor: Some(format!("{}/governor", base)),
             });
         }
     }
@@ -232,6 +238,7 @@ pub fn detect_gpu_backend() -> Option<GpuBackend> {
                 freq_table: avail,
                 set_min: format!("{}/min_freq", base),
                 set_max: format!("{}/max_freq", base),
+                governor: Some(format!("{}/governor", base)),
             });
         }
     }
@@ -240,6 +247,7 @@ pub fn detect_gpu_backend() -> Option<GpuBackend> {
             freq_table: "/sys/kernel/tegra_gpu/available_frequencies".into(),
             set_min: "/sys/kernel/tegra_gpu/gpu_floor_rate".into(),
             set_max: "/sys/kernel/tegra_gpu/gpu_cap_rate".into(),
+            governor: None,
         });
     }
     None
@@ -301,6 +309,19 @@ pub fn apply_gpu_freq_max() {
     if max > 0 {
         setvalue(&max.to_string(), &backend.set_max);
         setvalue(&max.to_string(), &backend.set_min);
+    }
+}
+
+pub fn set_gpu_governor(governor: &str) {
+    let backend = match detect_gpu_backend() {
+        Some(b) => b,
+        None => return,
+    };
+    if let Some(gov) = &backend.governor
+        && !gov.is_empty()
+        && path_exists(gov)
+    {
+        setvalue(governor, gov);
     }
 }
 
@@ -379,15 +400,92 @@ pub fn tune_net(low_latency: u64, ecn: u64, fastopen: u64, timestamps: u64) {
     setvalue(&timestamps.to_string(), "/proc/sys/net/ipv4/tcp_timestamps");
 }
 
-pub fn tune_block_sched(scheduler: &str, rq_affinity: u64) {
+#[derive(Clone, Copy)]
+pub enum SchedGroup {
+    /// powersave & balance → cpq (MQ) / cfq (SQ)
+    Power,
+    /// performance, gaming, gaming2 → mq-deadline (MQ) / deadline (SQ)
+    Performance,
+}
+
+fn is_loop_device(name: &str) -> bool {
+    name.starts_with("loop")
+}
+
+fn available_schedulers(queue: &std::path::Path) -> Vec<String> {
+    fs::read_to_string(queue.join("scheduler"))
+        .map(|s| {
+            s.split_whitespace()
+                .map(|t| t.trim_matches(|c| c == '[' || c == ']').to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn is_mq_kernel() -> bool {
     if let Ok(entries) = fs::read_dir("/sys/block") {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with("loop") {
+            if is_loop_device(&name) {
+                continue;
+            }
+            if entry.path().join("mq").is_dir() {
+                return true;
+            }
+        }
+    }
+    if let Ok(entries) = fs::read_dir("/sys/block") {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if is_loop_device(&name) {
+                continue;
+            }
+            let scheds = available_schedulers(&entry.path().join("queue"));
+            if scheds
+                .iter()
+                .any(|s| s == "mq-deadline" || s == "kyber" || s == "bfq" || s == "cpq")
+            {
+                return true;
+            }
+            if scheds.iter().any(|s| s == "cfq" || s == "noop") {
+                return false;
+            }
+            if scheds.iter().any(|s| s == "none") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn select_scheduler(available: &[String], group: SchedGroup, mq: bool) -> Option<String> {
+    let prefs: &[&str] = match (group, mq) {
+        (SchedGroup::Power, true) => &["cpq", "bfq", "mq-deadline", "kyber", "none"],
+        (SchedGroup::Power, false) => &["cfq", "deadline", "noop"],
+        (SchedGroup::Performance, true) => &["mq-deadline"],
+        (SchedGroup::Performance, false) => &["deadline"],
+    };
+    for pref in prefs {
+        if available.iter().any(|a| a == pref) {
+            return Some(pref.to_string());
+        }
+    }
+    None
+}
+
+pub fn tune_block_sched(group: SchedGroup, rq_affinity: u64) {
+    let mq = is_mq_kernel();
+    if let Ok(entries) = fs::read_dir("/sys/block") {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if is_loop_device(&name) {
                 continue;
             }
             let queue = entry.path().join("queue");
-            setvalue(scheduler, queue.join("scheduler").to_str().unwrap_or(""));
+            let available = available_schedulers(&queue);
+            if let Some(scheduler) = select_scheduler(&available, group, mq) {
+                setvalue(&scheduler, queue.join("scheduler").to_str().unwrap_or(""));
+            }
             setvalue(
                 &rq_affinity.to_string(),
                 queue.join("rq_affinity").to_str().unwrap_or(""),
