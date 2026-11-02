@@ -16,137 +16,41 @@
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static IS_IDLE_CHARGING_ACTIVE: AtomicBool = AtomicBool::new(false);
+static IS_CHARGE_LIMIT_ACTIVE: AtomicBool = AtomicBool::new(false);
+static BYPASS_CURRENT_LIMIT: AtomicBool = AtomicBool::new(false);
 static ORIGINAL_CURRENTS: Mutex<Option<Vec<(String, String)>>> = Mutex::new(None);
+static BYPASS_VERIFY_AT: Mutex<Option<std::time::Instant>> = Mutex::new(None);
 
-pub struct ChargeSwitch {
-    pub path: &'static str,
-    pub enable: &'static str,
-    pub disable: &'static str,
-    pub use_max: bool,
-}
+const CHARGE_SWITCH_PATH: &str = "/sys/class/power_supply/battery/input_suspend";
+const BYPASS_SWITCH_PATH: &str = "/sys/kernel/bypass_charge/bypass_charging";
+const CURRENT_LIMIT_PATH: &str = "/sys/class/power_supply/battery/constant_charge_current_max";
+const CURRENT_LIMIT_VALUE: &str = "100000";
+const CHARGE_ENABLE: &str = "0";
+const CHARGE_DISABLE: &str = "1";
 
-static SWITCH_CHIMERA: ChargeSwitch = ChargeSwitch {
-    path: "/sys/kernel/bypass_charge/bypass_charging",
-    enable: "0",
-    disable: "1",
-    use_max: false,
-};
-static SWITCH_AOZORA: ChargeSwitch = ChargeSwitch {
-    path: "/sys/class/power_supply/battery/input_suspend",
-    enable: "0",
-    disable: "1",
-    use_max: false,
-};
-static SWITCH_FALLBACK: ChargeSwitch = ChargeSwitch {
-    path: "/sys/class/power_supply/battery/constant_charge_current_max",
-    enable: "3000000",
-    disable: "100000",
-    use_max: true,
-};
-
-fn read_sysfs_backup(path_str: &str) -> Option<String> {
-    if let Ok(content) = fs::read_to_string(crate::config::AUTD_SYSFS_BACKUP_PATH) {
-        for line in content.lines() {
-            let mut parts = line.split('|');
-            if let (Some(p), Some(v)) = (parts.next(), parts.next())
-                && p == path_str
-            {
-                return Some(v.to_string());
-            }
-        }
-    }
-    None
-}
-
-fn is_valid_max(val_str: &str) -> bool {
-    let trim_val = val_str.trim();
-    if trim_val.is_empty() || trim_val == "0" {
-        return false;
-    }
-    if let Ok(num) = trim_val.parse::<i64>() {
-        if num < 400 || (num > 10000 && num < 400000) {
-            return false;
-        }
+fn bypass_switch_path() -> &'static str {
+    if Path::new(BYPASS_SWITCH_PATH).exists() {
+        BYPASS_SWITCH_PATH
     } else {
-        return false;
+        CHARGE_SWITCH_PATH
     }
-    true
 }
 
-fn get_safe_fallback(path: &Path, default_enable: &str) -> String {
-    if let Some(backup) = read_sysfs_backup(&path.to_string_lossy())
-        && is_valid_max(&backup)
-    {
-        return backup;
-    }
-
-    let max_path = path.with_file_name(format!(
-        "{}_max",
-        path.file_name().unwrap_or_default().to_string_lossy()
-    ));
-    if max_path.exists()
-        && let Ok(val) = fs::read_to_string(&max_path)
-        && is_valid_max(&val)
-    {
-        return val.trim().to_string();
-    }
-
-    let alternative_paths = [
-        "/sys/class/power_supply/battery/constant_charge_current_max",
-        "/sys/class/power_supply/main/current_max",
-        "/sys/class/power_supply/usb/current_max",
-    ];
-    for alt in alternative_paths.iter() {
-        if let Ok(val) = fs::read_to_string(alt)
-            && is_valid_max(&val)
-        {
-            return val.trim().to_string();
-        }
-    }
-
-    default_enable.to_string()
+fn battery_is_discharging() -> bool {
+    fs::read_to_string("/sys/class/power_supply/battery/status")
+        .is_ok_and(|status| status.trim() == "Discharging")
 }
 
-pub fn get_active_switches() -> Vec<&'static ChargeSwitch> {
-    let mut active = Vec::new();
-    let proc_version = std::process::Command::new("cat")
-        .arg("/proc/version")
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).to_lowercase())
-        .unwrap_or_default();
-
-    let is_aozora = proc_version.contains("aozora-v9") || proc_version.contains("aozora-v10");
-    let is_chimera = proc_version.contains("chimera");
-
-    let path_chimera = PathBuf::from(SWITCH_CHIMERA.path);
-    let path_aozora = PathBuf::from(SWITCH_AOZORA.path);
-    let path_fallback = PathBuf::from(SWITCH_FALLBACK.path);
-
-    if is_aozora {
-        if path_aozora.exists() {
-            active.push(&SWITCH_AOZORA);
-        } else if path_fallback.exists() {
-            active.push(&SWITCH_FALLBACK);
-        }
-    } else if is_chimera {
-        if path_chimera.exists() {
-            active.push(&SWITCH_CHIMERA);
-        } else if path_fallback.exists() {
-            active.push(&SWITCH_FALLBACK);
-        }
-    } else if path_fallback.exists() {
-        active.push(&SWITCH_FALLBACK);
-    }
-
-    active
+pub fn is_idle_charging_active() -> bool {
+    IS_IDLE_CHARGING_ACTIVE.load(Ordering::Relaxed)
 }
 
-fn write_sysfs(path: &PathBuf, val: &str) {
+fn write_sysfs(path: &Path, val: &str) {
     if let Ok(current_val) = fs::read_to_string(path)
         && current_val.trim() == val.trim()
     {
@@ -165,65 +69,96 @@ fn write_sysfs(path: &PathBuf, val: &str) {
         .status();
 }
 
-pub fn init_backup_once() {
-    if let Ok(content) = fs::read_to_string(crate::config::AUTD_SYSFS_BACKUP_PATH)
-        && content.lines().count() > 0
-    {
+pub fn enable_idle_charging() {
+    verify_bypass_fallback();
+
+    let is_first_time = !IS_IDLE_CHARGING_ACTIVE.load(Ordering::Relaxed);
+
+    if is_first_time {
+        let switch_path = bypass_switch_path();
+        let path = Path::new(switch_path);
+        let mut original_val = fs::read_to_string(path)
+            .map(|value| value.trim().to_string())
+            .unwrap_or_default();
+        if original_val.is_empty() || original_val == CHARGE_DISABLE {
+            original_val = CHARGE_ENABLE.to_string();
+        }
+
+        if let Ok(mut store) = ORIGINAL_CURRENTS.lock() {
+            *store = Some(vec![(switch_path.to_string(), original_val)]);
+        }
+        IS_IDLE_CHARGING_ACTIVE.store(true, Ordering::Relaxed);
+        BYPASS_CURRENT_LIMIT.store(false, Ordering::Relaxed);
+
+        if switch_path == CHARGE_SWITCH_PATH
+            && let Ok(mut pending) = BYPASS_VERIFY_AT.lock()
+        {
+            *pending = Some(std::time::Instant::now());
+        }
+
+        write_sysfs(path, CHARGE_DISABLE);
         return;
     }
 
-    let mut out = String::new();
-    let sw = &SWITCH_FALLBACK;
-    if sw.use_max {
-        let path = PathBuf::from(sw.path);
-        let fallback = get_safe_fallback(&path, sw.enable);
-        out.push_str(&format!("{}|{}\n", sw.path, fallback));
-    }
-
-    if !out.is_empty() {
-        let _ = fs::write(crate::config::AUTD_SYSFS_BACKUP_PATH, out);
+    if !BYPASS_CURRENT_LIMIT.load(Ordering::Relaxed) {
+        write_sysfs(Path::new(bypass_switch_path()), CHARGE_DISABLE);
     }
 }
 
-pub fn enable_idle_charging() {
-    let active_switches = get_active_switches();
-    if active_switches.is_empty() {
+fn verify_bypass_fallback() {
+    let due = BYPASS_VERIFY_AT.lock().ok().is_some_and(|mut pending| {
+        let ready = pending
+            .as_ref()
+            .is_some_and(|start| start.elapsed() >= std::time::Duration::from_millis(1200));
+        if ready {
+            *pending = None;
+        }
+        ready
+    });
+
+    if !due || has_online_input() == Some(false) || !battery_is_discharging() {
         return;
     }
 
-    let mut originals = Vec::new();
-    let is_first_time = !IS_IDLE_CHARGING_ACTIVE.load(Ordering::Relaxed);
+    let originals = ORIGINAL_CURRENTS
+        .lock()
+        .ok()
+        .and_then(|mut store| store.take());
+    let Some(originals) = originals else {
+        return;
+    };
 
-    for sw in &active_switches {
-        let path = PathBuf::from(sw.path);
-
-        if is_first_time {
-            let mut original_val = String::new();
-            if sw.use_max {
-                original_val = get_safe_fallback(&path, sw.enable);
-            } else {
-                if let Ok(current_val) = fs::read_to_string(&path) {
-                    original_val = current_val.trim().to_string();
-                }
-                if original_val.is_empty() || original_val == sw.disable {
-                    original_val = sw.enable.to_string();
-                }
-            }
-
-            originals.push((sw.path.to_string(), original_val));
-        }
-
-        write_sysfs(&path, sw.disable);
+    for (path_str, val) in originals {
+        write_sysfs(Path::new(&path_str), &val);
     }
 
-    if is_first_time {
-        if let Ok(mut store) = ORIGINAL_CURRENTS.lock()
-            && store.is_none()
-            && !originals.is_empty()
-        {
-            *store = Some(originals);
+    let Ok(current) = fs::read_to_string(CURRENT_LIMIT_PATH) else {
+        return;
+    };
+    let original_current = current.trim().to_string();
+    if original_current.is_empty() {
+        return;
+    }
+
+    write_sysfs(Path::new(CURRENT_LIMIT_PATH), CURRENT_LIMIT_VALUE);
+    let _ = fs::write(
+        crate::config::AUTD_BYPASS_LIMIT_BACKUP_PATH,
+        &original_current,
+    );
+    BYPASS_CURRENT_LIMIT.store(true, Ordering::Relaxed);
+    if let Ok(mut store) = ORIGINAL_CURRENTS.lock() {
+        *store = Some(vec![(CURRENT_LIMIT_PATH.to_string(), original_current)]);
+    }
+}
+
+fn recover_bypass_limit() {
+    let backup_path = crate::config::AUTD_BYPASS_LIMIT_BACKUP_PATH;
+    if let Ok(value) = fs::read_to_string(backup_path) {
+        let value = value.trim();
+        if !value.is_empty() {
+            write_sysfs(Path::new(CURRENT_LIMIT_PATH), value);
         }
-        IS_IDLE_CHARGING_ACTIVE.store(true, Ordering::Relaxed);
+        let _ = fs::remove_file(backup_path);
     }
 }
 
@@ -232,54 +167,192 @@ pub fn disable_idle_charging() {
         return;
     }
 
+    if let Ok(mut pending) = BYPASS_VERIFY_AT.lock() {
+        *pending = None;
+    }
+
     if let Ok(mut store) = ORIGINAL_CURRENTS.lock() {
         if let Some(originals) = store.take() {
             for (path_str, val) in originals {
-                let path = PathBuf::from(&path_str);
-                write_sysfs(&path, &val);
+                write_sysfs(Path::new(&path_str), &val);
             }
         } else {
-            let active_switches = get_active_switches();
-            for sw in active_switches {
-                let path = PathBuf::from(sw.path);
-                if sw.use_max {
-                    write_sysfs(&path, &get_safe_fallback(&path, sw.enable));
-                } else {
-                    write_sysfs(&path, sw.enable);
-                }
-            }
+            write_sysfs(Path::new(bypass_switch_path()), CHARGE_ENABLE);
         }
     }
 
     IS_IDLE_CHARGING_ACTIVE.store(false, Ordering::Relaxed);
+    BYPASS_CURRENT_LIMIT.store(false, Ordering::Relaxed);
+    let _ = fs::remove_file(crate::config::AUTD_BYPASS_LIMIT_BACKUP_PATH);
 }
 
 pub fn reset_charging_states() {
     IS_IDLE_CHARGING_ACTIVE.store(false, Ordering::Relaxed);
+    BYPASS_CURRENT_LIMIT.store(false, Ordering::Relaxed);
     if let Ok(mut store) = ORIGINAL_CURRENTS.lock() {
         *store = None;
+    }
+    if let Ok(mut pending) = BYPASS_VERIFY_AT.lock() {
+        *pending = None;
+    }
+    recover_bypass_limit();
+}
+
+fn read_flag(path: &str) -> bool {
+    fs::read(path).is_ok_and(|bytes| bytes.first() == Some(&b'1'))
+}
+
+fn read_config_number(path: &str, default: i32) -> i32 {
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|value| value.trim().parse::<i32>().ok())
+        .unwrap_or(default)
+}
+
+fn charge_limit_marker_active() -> bool {
+    read_flag(crate::config::AUTD_CHARGE_LIMIT_STATE_PATH)
+}
+
+fn is_charge_input_suspended() -> bool {
+    fs::read_to_string(CHARGE_SWITCH_PATH).is_ok_and(|value| value.trim() == CHARGE_DISABLE)
+}
+
+fn set_charge_suspended(suspend: bool) {
+    let path = Path::new(CHARGE_SWITCH_PATH);
+
+    if suspend {
+        let _ = fs::write(crate::config::AUTD_CHARGE_LIMIT_STATE_PATH, "1");
+        write_sysfs(path, CHARGE_DISABLE);
+        IS_CHARGE_LIMIT_ACTIVE.store(true, Ordering::Relaxed);
+    } else {
+        write_sysfs(path, CHARGE_ENABLE);
+        let _ = fs::write(crate::config::AUTD_CHARGE_LIMIT_STATE_PATH, "0");
+        IS_CHARGE_LIMIT_ACTIVE.store(false, Ordering::Relaxed);
+    }
+}
+
+fn has_online_input() -> Option<bool> {
+    if let Ok(entries) = fs::read_dir("/sys/class/power_supply") {
+        let mut found_online = false;
+
+        for entry in entries.flatten() {
+            if entry.file_name().to_string_lossy() == "battery" {
+                continue;
+            }
+
+            let online_path = entry.path().join("online");
+            if let Ok(value) = fs::read_to_string(&online_path) {
+                found_online = true;
+                if value.trim() == "1" {
+                    return Some(true);
+                }
+            }
+        }
+
+        if found_online {
+            return Some(false);
+        }
+    }
+
+    None
+}
+
+pub fn is_charger_connected() -> bool {
+    if let Some(online) = has_online_input() {
+        return online;
+    }
+
+    if let Ok(status) = fs::read_to_string("/sys/class/power_supply/battery/status") {
+        return matches!(status.trim(), "Charging" | "Full" | "Not charging");
+    }
+
+    false
+}
+
+pub fn enforce_charge_limit() {
+    let enabled = read_flag(crate::config::AUTD_CHARGE_LIMIT_ENABLE_PATH);
+    let active = IS_CHARGE_LIMIT_ACTIVE.load(Ordering::Relaxed) || charge_limit_marker_active();
+
+    if is_idle_charging_active() {
+        return;
+    }
+
+    if !enabled {
+        if active {
+            set_charge_suspended(false);
+        }
+        return;
+    }
+
+    let Some(level) = get_battery_level_opt() else {
+        return;
+    };
+
+    if !is_charger_connected() {
+        if active {
+            set_charge_suspended(false);
+        }
+        return;
+    }
+
+    let stop = read_config_number(crate::config::AUTD_CHARGE_LIMIT_STOP_PATH, 80).clamp(30, 100);
+    let resume = read_config_number(
+        crate::config::AUTD_CHARGE_LIMIT_RESUME_PATH,
+        (stop - 5).max(20),
+    )
+    .clamp(20, stop - 1);
+
+    if level >= stop {
+        if !is_charge_input_suspended() {
+            let announce = !active;
+            set_charge_suspended(true);
+            if announce {
+                crate::utils::cmd::send_toast(&format!("Charging paused at {}%", level));
+            }
+        }
+    } else if level <= resume && active {
+        set_charge_suspended(false);
+        crate::utils::cmd::send_toast("Charging resumed");
+    }
+}
+
+pub fn recover_charge_limit_state() {
+    if charge_limit_marker_active() {
+        set_charge_suspended(false);
+    } else {
+        IS_CHARGE_LIMIT_ACTIVE.store(false, Ordering::Relaxed);
+    }
+}
+
+pub fn restore_charge_limit() {
+    if IS_CHARGE_LIMIT_ACTIVE.load(Ordering::Relaxed) || charge_limit_marker_active() {
+        set_charge_suspended(false);
+    }
+}
+
+pub fn get_battery_level_opt() -> Option<i32> {
+    let bytes = fs::read("/sys/class/power_supply/battery/capacity").ok()?;
+    let mut val = 0;
+    let mut has_digit = false;
+
+    for &b in bytes.iter() {
+        if b.is_ascii_digit() {
+            val = val * 10 + (b - b'0') as i32;
+            has_digit = true;
+        } else if has_digit {
+            break;
+        }
+    }
+
+    if has_digit {
+        Some(val.clamp(0, 100))
+    } else {
+        None
     }
 }
 
 pub fn get_battery_level() -> i32 {
-    if let Ok(bytes) = fs::read("/sys/class/power_supply/battery/capacity") {
-        let mut val = 0;
-        let mut has_digit = false;
-
-        for &b in bytes.iter() {
-            if b.is_ascii_digit() {
-                val = val * 10 + (b - b'0') as i32;
-                has_digit = true;
-            } else if has_digit {
-                break;
-            }
-        }
-
-        if has_digit {
-            return val.clamp(0, 100);
-        }
-    }
-    100
+    get_battery_level_opt().unwrap_or(100)
 }
 
 pub fn is_android_powersave() -> bool {
