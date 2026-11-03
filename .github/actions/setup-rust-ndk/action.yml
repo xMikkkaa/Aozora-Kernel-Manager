@@ -26,6 +26,7 @@ runs:
         workspaces: |
           rust/xaozora_jni
           rust/xaozora_daemon
+          rust/xaozora_rupture
 
     - name: Install cargo-ndk (cached)
       uses: taiki-e/install-action@v2
