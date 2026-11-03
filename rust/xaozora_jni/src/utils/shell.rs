@@ -66,7 +66,17 @@ pub fn execute_cmd_and_get_output(cmd: &str) -> String {
     String::new()
 }
 
+fn read_file_direct(path: &str) -> Option<String> {
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|content| content.trim().to_string())
+}
+
 pub fn read_system_file(path: &str) -> String {
+    if let Some(content) = read_file_direct(path) {
+        return content;
+    }
+
     let output = execute_cmd_and_get_output(&format!("cat {} 2>/dev/null", path));
     if output.contains("No such file or directory") || output.contains("Permission denied") {
         return String::new();
@@ -75,6 +85,9 @@ pub fn read_system_file(path: &str) -> String {
 }
 
 pub fn write_system_file(path: &str, value: &str) -> bool {
+    if std::fs::write(path, format!("{}\n", value)).is_ok() {
+        return true;
+    }
     execute_cmd(&format!("echo '{}' > {}", value, path))
 }
 
