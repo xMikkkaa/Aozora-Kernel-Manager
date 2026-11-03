@@ -191,7 +191,7 @@ Grant root access when prompted on first launch.
 | JDK | 17+ | Java compilation |
 | Rust | Latest stable | Native components |
 | `cargo-ndk` | Latest | Cross-compilation for Android |
-| Android NDK | `27.0.12077973` | Native toolchain |
+| Android NDK | `27.3.13750724` | Native toolchain |
 
 ### Setup Rust Toolchain
 
