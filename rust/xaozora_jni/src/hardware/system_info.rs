@@ -336,6 +336,37 @@ pub fn fetch_system_info() -> SystemInfo {
 static LAST_CPU_TOTAL: AtomicU64 = AtomicU64::new(0);
 static LAST_CPU_IDLE: AtomicU64 = AtomicU64::new(0);
 
+fn read_first(paths: &[&str]) -> String {
+    for path in paths {
+        let value = read_system_file(path);
+        if !value.is_empty() {
+            return value;
+        }
+    }
+    String::new()
+}
+
+fn find_devfreq_gpu_dir() -> Option<String> {
+    for entry in std::fs::read_dir("/sys/class/devfreq").ok()?.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let lower = name.to_lowercase();
+        if lower.contains("mali") || lower.contains("gpu") || lower.contains(".gpu") {
+            return Some(name);
+        }
+    }
+    None
+}
+
+fn find_mali_platform_dir() -> Option<String> {
+    for entry in std::fs::read_dir("/sys/devices/platform").ok()?.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.contains("mali") {
+            return Some(entry.path().to_string_lossy().to_string());
+        }
+    }
+    None
+}
+
 pub fn poll_hardware() -> RealTimeMetrics {
     // CPU Load
     let mut cpu_load = 0.0;
@@ -464,11 +495,7 @@ pub fn poll_hardware() -> RealTimeMetrics {
     }
 
     if g_freq_val == 0 || raw_load_pct == 0.0 {
-        let devfreq_gpu = execute_cmd_and_get_output(
-            "ls /sys/class/devfreq 2>/dev/null | grep -m1 'mali\\|gpu\\|\\.gpu'",
-        );
-        let devfreq_gpu = devfreq_gpu.trim();
-        if !devfreq_gpu.is_empty() {
+        if let Some(devfreq_gpu) = find_devfreq_gpu_dir() {
             let base = format!("/sys/class/devfreq/{}", devfreq_gpu);
             if g_freq_val == 0 {
                 g_freq_val = read_system_file(&format!("{}/cur_freq", base))
@@ -487,10 +514,7 @@ pub fn poll_hardware() -> RealTimeMetrics {
     }
 
     if g_freq_val == 0 && raw_load_pct == 0.0 {
-        let mali_dir =
-            execute_cmd_and_get_output("ls -d /sys/devices/platform/*mali* 2>/dev/null | head -1");
-        let mali_dir = mali_dir.trim();
-        if !mali_dir.is_empty() {
+        if let Some(mali_dir) = find_mali_platform_dir() {
             let load_str = read_system_file(&format!("{}/load", mali_dir))
                 .trim()
                 .to_string();
@@ -564,23 +588,21 @@ pub fn poll_hardware() -> RealTimeMetrics {
     };
 
     // Battery
-    let mut t_level = 0;
-    let mut t_temp = 0.0f32;
-    let bat_dump = crate::utils::shell::execute_cmd_and_get_output("dumpsys battery");
-    for line in bat_dump.lines() {
-        let info = line.trim();
-        if info.starts_with("level: ") {
-            t_level = info.replace("level: ", "").parse::<i32>().unwrap_or(0);
-        } else if info.starts_with("temperature: ") {
-            t_temp = info
-                .replace("temperature: ", "")
-                .parse::<f32>()
-                .unwrap_or(0.0)
-                / 10.0;
-        }
-    }
-    let battery_level = t_level;
-    let battery_temp = format!("{:.1}°C", t_temp);
+    let battery_level = read_first(&[
+        "/sys/class/power_supply/battery/capacity",
+        "/sys/class/power_supply/Battery/capacity",
+        "/sys/class/power_supply/bms/capacity",
+    ])
+    .parse::<i32>()
+    .unwrap_or(0);
+    let battery_temp_raw = read_first(&[
+        "/sys/class/power_supply/battery/temp",
+        "/sys/class/power_supply/Battery/temp",
+        "/sys/class/power_supply/bms/temp",
+    ])
+    .parse::<f32>()
+    .unwrap_or(0.0);
+    let battery_temp = format!("{:.1}°C", battery_temp_raw / 10.0);
 
     let current_raw = read_system_file("/sys/class/power_supply/battery/current_now")
         .trim()
