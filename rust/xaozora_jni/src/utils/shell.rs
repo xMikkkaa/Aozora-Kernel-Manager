@@ -66,6 +66,42 @@ pub fn execute_cmd_and_get_output(cmd: &str) -> String {
     String::new()
 }
 
+const SCRIPT_SEPARATOR: &str = "__XA0Z0RA_SEP__";
+
+pub fn execute_script_and_get_output(cmds: &[&str]) -> Vec<String> {
+    if cmds.is_empty() {
+        return Vec::new();
+    }
+
+    let mut script = String::new();
+    for cmd in cmds {
+        script.push_str("echo ");
+        script.push_str(SCRIPT_SEPARATOR);
+        script.push_str("; ");
+        script.push_str(cmd);
+        script.push_str("; ");
+    }
+    script.push_str("echo ");
+    script.push_str(SCRIPT_SEPARATOR);
+
+    let output = execute_cmd_and_get_output(&script);
+    if output.is_empty() {
+        return vec![String::new(); cmds.len()];
+    }
+
+    let mut parts: Vec<String> = output
+        .split(SCRIPT_SEPARATOR)
+        .map(|part| part.trim().to_string())
+        .collect();
+
+    if !parts.is_empty() {
+        parts.remove(0);
+    }
+    parts.truncate(cmds.len());
+    parts.resize(cmds.len(), String::new());
+    parts
+}
+
 fn read_file_direct(path: &str) -> Option<String> {
     std::fs::read_to_string(path)
         .ok()

@@ -4,7 +4,7 @@ use jni::{errors::ThrowRuntimeExAndDefault, EnvUnowned};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::utils::shell::{execute_cmd_and_get_output, read_system_file};
+use crate::utils::shell::{execute_script_and_get_output, read_system_file};
 
 #[derive(Serialize, Deserialize)]
 pub struct SystemInfo {
@@ -46,24 +46,6 @@ pub struct RealTimeMetrics {
     pub battery_level: i32,
     pub battery_temp: String,
     pub battery_current: String,
-}
-
-fn get_prop(key: &str) -> String {
-    let out = execute_cmd_and_get_output(&format!("getprop {}", key));
-    if out.is_empty() {
-        "-".to_string()
-    } else {
-        out
-    }
-}
-
-fn get_soc_info() -> String {
-    let board = get_prop("ro.board.platform");
-    if board != "-" {
-        board
-    } else {
-        get_prop("ro.hardware")
-    }
 }
 
 fn get_ram_info() -> String {
@@ -159,6 +141,44 @@ pub fn fetch_system_info() -> SystemInfo {
         String::new()
     };
 
+    let batch_cmds = [
+        "getprop ro.product.model",
+        "getprop ro.product.device",
+        "getprop ro.build.version.release",
+        "getprop ro.board.platform",
+        "getprop ro.hardware",
+        "dumpsys SurfaceFlinger | grep -i GLES",
+        "cat /proc/version",
+        "getenforce",
+        "wm size",
+    ];
+    let batch = execute_script_and_get_output(&batch_cmds);
+
+    let prop_or_dash = |value: &str| -> String {
+        if value.is_empty() {
+            "-".to_string()
+        } else {
+            value.to_string()
+        }
+    };
+    let model = prop_or_dash(&batch[0]);
+    let device = prop_or_dash(&batch[1]);
+    let android = prop_or_dash(&batch[2]);
+    let board = prop_or_dash(&batch[3]);
+    let soc = if board != "-" {
+        board
+    } else {
+        prop_or_dash(&batch[4])
+    };
+    let open_gl_output = batch[5].trim().to_string();
+    let kernel = batch[6].clone();
+    let selinux = if batch[7].is_empty() {
+        "-".to_string()
+    } else {
+        batch[7].clone()
+    };
+    let resolution = batch[8].replace("Physical size: ", "").trim().to_string();
+
     let entropy = read_system_file("/proc/sys/kernel/random/entropy_avail")
         .trim()
         .to_string();
@@ -175,9 +195,6 @@ pub fn fetch_system_info() -> SystemInfo {
         .to_string();
     let wireguard = wg_version;
 
-    let open_gl_output = execute_cmd_and_get_output("dumpsys SurfaceFlinger | grep -i GLES")
-        .trim()
-        .to_string();
     let mut open_gl = if let Some(idx) = open_gl_output.find("GLES:") {
         open_gl_output[idx + 5..].trim().to_string()
     } else if !open_gl_output.is_empty() {
@@ -286,20 +303,12 @@ pub fn fetch_system_info() -> SystemInfo {
         battery_health = format!("{:.1}% ({})", health_raw, health_category);
     }
 
-    let kernel = execute_cmd_and_get_output("cat /proc/version");
-    let selinux = execute_cmd_and_get_output("getenforce");
-    let selinux = if selinux.is_empty() {
-        "-".to_string()
-    } else {
-        selinux
-    };
-
     SystemInfo {
-        model: get_prop("ro.product.model"),
-        device: get_prop("ro.product.device"),
-        android: get_prop("ro.build.version.release"),
+        model,
+        device,
+        android,
         selinux,
-        soc: get_soc_info(),
+        soc,
         ram: get_ram_info(),
         kernel: if kernel.is_empty() {
             "-".to_string()
@@ -316,10 +325,7 @@ pub fn fetch_system_info() -> SystemInfo {
                 format!("{}%", capacity)
             }
         },
-        resolution: execute_cmd_and_get_output("wm size")
-            .replace("Physical size: ", "")
-            .trim()
-            .to_string(),
+        resolution,
         root_manager: "Unknown".to_string(),
         root_version: "Unknown".to_string(),
         load_avg,
