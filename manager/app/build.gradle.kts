@@ -143,6 +143,7 @@ tasks.register<Exec>("buildRustJni") {
 
     inputs.dir(rootProject.file("rust/xaozora_jni/src"))
     inputs.file(rootProject.file("rust/xaozora_jni/Cargo.toml"))
+    inputs.file(rootProject.file("rust/xaozora_jni/Cargo.lock"))
     outputs.dir(jniLibsDir)
 }
 
@@ -190,8 +191,7 @@ afterEvaluate {
     }
 
     tasks.matching {
-        it.name.matches(Regex("merge(Debug|Release)JniLibFolders")) ||
-        it.name.matches(Regex("pre(Debug|Release)Build"))
+        it.name.matches(Regex("merge(Debug|Release)JniLibFolders"))
     }.configureEach {
         dependsOn("buildRustJni")
     }
