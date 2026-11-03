@@ -83,7 +83,7 @@ pub fn apply_powersave() {
 
 pub fn apply_balance() {
     let soc = detect_soc();
-    let freqs = compute_cpu_freqs(2, 100);
+    let freqs = compute_cpu_freqs(101, 100);
     apply_cpu_freqs(&freqs);
     set_cpu_gov("schedutil");
     tune_block_io(1, 1, 128, 128);
