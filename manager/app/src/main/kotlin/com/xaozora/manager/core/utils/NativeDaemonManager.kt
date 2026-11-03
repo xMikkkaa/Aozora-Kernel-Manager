@@ -17,6 +17,13 @@ object NativeDaemonManager {
     private const val TAG = "NativeDaemonManager"
     private val daemonMutex = Mutex()
     private val ruptureBinaries = listOf("powersave", "balance", "gaming", "gaming2", "performance", "cachecleaner")
+    private const val AUTD_CACHE_MS = 30_000L
+
+    @Volatile
+    private var cachedAutdArmed: Boolean? = null
+
+    @Volatile
+    private var cachedAutdAt = 0L
 
     private fun suCmd(cmd: String): Boolean {
         return try {
@@ -126,6 +133,7 @@ object NativeDaemonManager {
             if (suCmd(startCmd)) {
                 kotlinx.coroutines.delay(200)
             }
+            invalidateAutdCache()
             
             true
         }
@@ -166,12 +174,27 @@ object NativeDaemonManager {
     }
 
     fun isAutdArmed(): Boolean {
+        val now = System.currentTimeMillis()
+        val cached = cachedAutdArmed
+        if (cached != null && now - cachedAutdAt < AUTD_CACHE_MS) {
+            return cached
+        }
+
         val output = suCmdOut("for p in $(pgrep -x xaozora_daemon); do cat /proc/\$p/cmdline; echo; done")
-        return output.contains("--enable-autd")
+        val armed = output.contains("--enable-autd")
+        cachedAutdAt = now
+        cachedAutdArmed = armed
+        return armed
+    }
+
+    fun invalidateAutdCache() {
+        cachedAutdArmed = null
+        cachedAutdAt = 0L
     }
 
     suspend fun killDaemon() {
         suCmd("killall -9 $DAEMON_FILENAME; pkill -9 $DAEMON_FILENAME")
+        invalidateAutdCache()
         kotlinx.coroutines.delay(500)
     }
 }
