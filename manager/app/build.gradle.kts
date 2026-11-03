@@ -14,7 +14,7 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.xaozora.manager"
-    ndkVersion = "27.0.12077973"
+    ndkVersion = "27.3.13750724"
     compileSdk {
         version = release(37) {
             minorApiLevel = 2
