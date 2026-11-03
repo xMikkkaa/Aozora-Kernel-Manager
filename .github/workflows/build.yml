@@ -123,6 +123,8 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/kotlin' && github.ref != 'refs/heads/dev' }}
 
       - name: Build Release APK
         run: |
