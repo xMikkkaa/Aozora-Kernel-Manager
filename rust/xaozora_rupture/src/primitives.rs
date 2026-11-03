@@ -486,7 +486,7 @@ pub fn tune_net(low_latency: u64, ecn: u64, fastopen: u64, timestamps: u64) {
 pub enum SchedGroup {
     /// powersave & balance → cpq (MQ) / cfq (SQ)
     Power,
-    /// performance, gaming, gaming2 → mq-deadline (MQ) / deadline (SQ)
+    /// performance, gaming, gaming2 → mq-deadline (MQ) / noop (SQ)
     Performance,
 }
 
@@ -545,7 +545,7 @@ fn select_scheduler(available: &[String], group: SchedGroup, mq: bool) -> Option
         (SchedGroup::Power, true) => &["cpq", "bfq", "mq-deadline", "kyber", "none"],
         (SchedGroup::Power, false) => &["cfq", "deadline", "noop"],
         (SchedGroup::Performance, true) => &["mq-deadline"],
-        (SchedGroup::Performance, false) => &["deadline"],
+        (SchedGroup::Performance, false) => &["noop"],
     };
     for pref in prefs {
         if available.iter().any(|a| a == pref) {
