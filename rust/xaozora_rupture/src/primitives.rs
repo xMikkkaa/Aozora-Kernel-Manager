@@ -325,6 +325,88 @@ pub fn set_gpu_governor(governor: &str) {
     }
 }
 
+const GPU_GOVERNOR_DEFAULT_PATH: &str =
+    "/data/data/com.xaozora.manager/files/autd/rupture_gpu_governor";
+
+const FIXED_GOVERNORS: [&str; 3] = ["performance", "powersave", "userspace"];
+
+fn read_trimmed(path: &str) -> Option<String> {
+    fs::read_to_string(path)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn available_governors_path(backend: &GpuBackend) -> Option<std::path::PathBuf> {
+    let governor = backend.governor.as_deref()?;
+    let dir = std::path::Path::new(governor).parent()?;
+    ["available_governors", "gpu_available_governors"]
+        .into_iter()
+        .map(|name| dir.join(name))
+        .find(|path| path.exists())
+}
+
+fn governor_available(backend: &GpuBackend, governor: &str) -> bool {
+    available_governors_path(backend)
+        .and_then(|path| fs::read_to_string(path).ok())
+        .is_none_or(|content| content.split_whitespace().any(|entry| entry == governor))
+}
+
+fn pick_preferred_governor(available: &str) -> Option<String> {
+    let governors: Vec<&str> = available.split_whitespace().collect();
+    governors
+        .iter()
+        .copied()
+        .find(|governor| !FIXED_GOVERNORS.contains(governor))
+        .or_else(|| governors.first().copied())
+        .map(str::to_owned)
+}
+
+fn preferred_governor(backend: &GpuBackend) -> Option<String> {
+    pick_preferred_governor(&fs::read_to_string(available_governors_path(backend)?).ok()?)
+}
+
+pub fn capture_gpu_governor_default() {
+    if path_exists(GPU_GOVERNOR_DEFAULT_PATH) {
+        return;
+    }
+    let Some(backend) = detect_gpu_backend() else {
+        return;
+    };
+    let Some(governor_path) = backend.governor.as_deref() else {
+        return;
+    };
+    let Some(current) = read_trimmed(governor_path) else {
+        return;
+    };
+    let default = if FIXED_GOVERNORS.contains(&current.as_str()) {
+        match preferred_governor(&backend) {
+            Some(governor) if !FIXED_GOVERNORS.contains(&governor.as_str()) => governor,
+            _ => return,
+        }
+    } else {
+        current
+    };
+    if let Some(parent) = std::path::Path::new(GPU_GOVERNOR_DEFAULT_PATH).parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let _ = fs::write(GPU_GOVERNOR_DEFAULT_PATH, default);
+}
+
+pub fn restore_gpu_governor() {
+    let Some(backend) = detect_gpu_backend() else {
+        return;
+    };
+    let Some(governor_path) = backend.governor.as_deref() else {
+        return;
+    };
+    let saved = read_trimmed(GPU_GOVERNOR_DEFAULT_PATH)
+        .filter(|governor| governor_available(&backend, governor));
+    if let Some(governor) = saved.or_else(|| preferred_governor(&backend)) {
+        setvalue(&governor, governor_path);
+    }
+}
+
 pub fn set_gpu_freq_gaming() {
     let backend = match detect_gpu_backend() {
         Some(b) => b,
@@ -541,5 +623,31 @@ pub fn apply_cpu_freqs(pairs: &[(u32, u64, u64)]) {
         if *max > 0 {
             setvalue(&max.to_string(), &policy_path(*policy, "scaling_max_freq"));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pick_preferred_governor;
+
+    #[test]
+    fn prefers_dynamic_governor_from_available_list() {
+        assert_eq!(
+            pick_preferred_governor("msm-adreno-tz performance simple_ondemand").as_deref(),
+            Some("msm-adreno-tz")
+        );
+        assert_eq!(
+            pick_preferred_governor("performance simple_ondemand").as_deref(),
+            Some("simple_ondemand")
+        );
+    }
+
+    #[test]
+    fn falls_back_to_first_available_governor() {
+        assert_eq!(
+            pick_preferred_governor("performance powersave").as_deref(),
+            Some("performance")
+        );
+        assert_eq!(pick_preferred_governor("").as_deref(), None);
     }
 }

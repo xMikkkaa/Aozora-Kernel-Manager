@@ -19,9 +19,10 @@ pub mod primitives;
 pub mod soc;
 
 use primitives::{
-    SchedGroup, apply_cpu_freqs, apply_gpu_freq, apply_gpu_freq_max, compute_cpu_freqs,
-    set_cmd_power_adaptive, set_cpu_gov, set_gpu_freq_gaming, set_gpu_governor, set_hwui_target,
-    set_settings, shell, tune_block_io, tune_block_sched, tune_net, tune_vm_io,
+    SchedGroup, apply_cpu_freqs, apply_gpu_freq, apply_gpu_freq_max, capture_gpu_governor_default,
+    compute_cpu_freqs, restore_gpu_governor, set_cmd_power_adaptive, set_cpu_gov,
+    set_gpu_freq_gaming, set_gpu_governor, set_hwui_target, set_settings, shell, tune_block_io,
+    tune_block_sched, tune_net, tune_vm_io,
 };
 use soc::{detect_soc, soc_apply};
 
@@ -78,6 +79,7 @@ pub fn apply_powersave() {
     set_cmd_power_adaptive(true);
     soc_apply(2, soc);
     apply_gpu_freq(2);
+    restore_gpu_governor();
     cleanup_mode_ops();
 }
 
@@ -96,10 +98,12 @@ pub fn apply_balance() {
     set_cmd_power_adaptive(false);
     soc_apply(3, soc);
     apply_gpu_freq(3);
+    restore_gpu_governor();
     cleanup_mode_ops();
 }
 
 pub fn apply_performance() {
+    capture_gpu_governor_default();
     let soc = detect_soc();
     let freqs = compute_cpu_freqs(100, 100);
     apply_cpu_freqs(&freqs);
@@ -119,6 +123,7 @@ pub fn apply_performance() {
 }
 
 pub fn apply_gaming() {
+    capture_gpu_governor_default();
     let soc = detect_soc();
     let freqs = compute_cpu_freqs(2, 100);
     apply_cpu_freqs(&freqs);
@@ -138,6 +143,7 @@ pub fn apply_gaming() {
 }
 
 pub fn apply_gaming2() {
+    capture_gpu_governor_default();
     let soc = detect_soc();
     let freqs = compute_cpu_freqs(100, 100);
     apply_cpu_freqs(&freqs);

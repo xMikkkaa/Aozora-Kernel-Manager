@@ -16,9 +16,10 @@
 
 use std::fs;
 
-use super::primitives::setvalue;
+use super::primitives::{capture_gpu_governor_default, setvalue};
 
 pub fn optimize_boot_tune() {
+    capture_gpu_governor_default();
     setvalue("1", "/sys/module/workqueue/parameters/power_efficient");
 
     if let Ok(entries) = fs::read_dir("/sys/block") {
