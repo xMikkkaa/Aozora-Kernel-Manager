@@ -92,11 +92,8 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/kotlin' && github.ref != 'refs/heads/dev' }}
       
-      - name: Run Android Lint
-        run: ./gradlew lintDebug
-      
-      - name: Run Android Unit Tests
-        run: ./gradlew testDebugUnitTest
+      - name: Run Android Lint & Unit Tests
+        run: ./gradlew lintDebug testDebugUnitTest --continue
       
       - name: Upload Lint Report (If Failed)
         uses: actions/upload-artifact@v7
