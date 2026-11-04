@@ -103,8 +103,8 @@ pub fn run_autd() {
                     events: libc::POLLIN,
                     revents: 0,
                 };
-                let ret = unsafe { libc::poll(&mut pfd, 1, -1) };
-                if ret > 0 && (pfd.revents & libc::POLLIN) != 0 {
+                unsafe { libc::poll(&mut pfd, 1, 1000) };
+                if (pfd.revents & libc::POLLIN) != 0 {
                     let mut buf = [0u8; 128];
                     if let Ok(n) = std::io::Read::read(&mut fifo_file, &mut buf) {
                         let msg = String::from_utf8_lossy(&buf[..n]);
@@ -116,8 +116,8 @@ pub fn run_autd() {
                             }
                         }
                     }
-                    monitor::battery::enforce_charge_limit();
                 }
+                monitor::battery::enforce_charge_limit();
             }
 
             if RUNNING.load(Ordering::SeqCst) {
