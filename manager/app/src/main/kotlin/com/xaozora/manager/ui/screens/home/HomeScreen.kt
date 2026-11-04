@@ -93,7 +93,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
-import com.xaozora.manager.core.shell.RootShellHelper
 import com.xaozora.manager.core.utils.SystemInfo
 import com.xaozora.manager.core.utils.SystemInfoUtils
 import com.xaozora.manager.ui.components.GlassCard
@@ -128,9 +127,6 @@ fun HomeScreen(
     var bannerBias by remember { mutableStateOf(prefs.getFloat("banner_bias", 0.5f)) }
 
     var systemInfo by remember { mutableStateOf<SystemInfo?>(null) }
-    var isDaemonRunning by remember { mutableStateOf(false) }
-    var isAutdAvailable by remember { mutableStateOf(false) }
-    var daemonMethod by remember { mutableStateOf("Checking Daemon...") }
 
     var cpuLoad by remember { mutableStateOf(0.45f) }
     var gpuFreq by remember { mutableStateOf("400 MHz") }
@@ -155,35 +151,6 @@ fun HomeScreen(
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             systemInfo = SystemInfoUtils.fetchSystemInfo()
-            isAutdAvailable = RootShellHelper.checkFileExists("${context.filesDir.path}/xaozora_daemon")
-        }
-        com.xaozora.manager.core.utils.NativeDaemonManager.extractAndStartDaemon(context)
-    }
-
-    LaunchedEffect(lifecycleState) {
-        if (lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
-            while (true) {
-                val running = withContext(Dispatchers.IO) { com.xaozora.manager.core.utils.NativeDaemonManager.isAutdArmed() }
-                isDaemonRunning = running
-                delay(3000)
-            }
-        }
-    }
-
-    LaunchedEffect(isAutdAvailable, lifecycleState) {
-        if (isAutdAvailable && lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
-            withContext(Dispatchers.IO) {
-                while (true) {
-                    val infoPath = "${context.filesDir.path}/autd/autd_awake_method.info"
-                    val method = try { java.io.File(infoPath).readText().trim() } catch (e: Exception) { "" }
-                    daemonMethod = if (method.isNotBlank() && !method.contains("No such file", true) && !method.contains("error", true)) {
-                        method
-                    } else {
-                        "Daemon info unavailable"
-                    }
-                    delay(2000)
-                }
-            }
         }
     }
 
