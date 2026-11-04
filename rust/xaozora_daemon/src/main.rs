@@ -103,7 +103,14 @@ fn main() {
             "--disable-autd" => disable_autd = true,
             "--reset-stats" => reset_stats = true,
             "--battery-logger" if i + 1 < args.len() => {
-                logger_path = Some(args[i + 1].clone());
+                let candidate = args[i + 1].clone();
+                if candidate.starts_with(config::APP_FILES_DIR)
+                    && !candidate.split('/').any(|part| part == "..")
+                {
+                    logger_path = Some(candidate);
+                } else {
+                    println!("Ignoring battery logger path outside the app files directory");
+                }
                 i += 1;
             }
             _ => {}

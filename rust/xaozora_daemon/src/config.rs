@@ -19,6 +19,7 @@ use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
 pub const APP_DATA_DIR: &str = "/data/data/com.xaozora.manager";
+pub const APP_FILES_DIR: &str = "/data/data/com.xaozora.manager/files";
 pub const AUTD_DIR: &str = "autd";
 pub const BATTMON_DIR: &str = "battmon";
 pub const AUTD_BASE_MODE_PATH: &str = "autd/autd_base_mode";
