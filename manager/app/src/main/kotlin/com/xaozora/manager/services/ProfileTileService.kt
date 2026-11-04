@@ -8,6 +8,7 @@ import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.view.WindowManager
+import android.widget.Toast
 import com.google.gson.Gson
 import com.xaozora.manager.core.shell.RootShellHelper
 import kotlinx.coroutines.CoroutineScope
@@ -33,7 +34,7 @@ class ProfileTileService : TileService() {
 
     private external fun getActiveProfile(): String
     private external fun getAvailableProfilesJson(): String
-    private external fun applyProfile(profileId: String)
+    private external fun applyProfile(profileId: String): Boolean
 
     override fun onStartListening() {
         super.onStartListening()
@@ -134,7 +135,12 @@ class ProfileTileService : TileService() {
                         
                         layout.setOnClickListener {
                             CoroutineScope(Dispatchers.IO).launch {
-                                applyProfile(profileId)
+                                val applied = runCatching { applyProfile(profileId) }.getOrDefault(false)
+                                if (!applied) {
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(this@ProfileTileService, "Failed to apply profile", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
                                 updateTileState()
                             }
                             dialog.dismiss()

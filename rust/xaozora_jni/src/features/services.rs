@@ -1,5 +1,5 @@
 use jni::objects::{JClass, JString};
-use jni::sys::jstring;
+use jni::sys::{jboolean, jstring};
 use jni::{errors::ThrowRuntimeExAndDefault, EnvUnowned};
 use serde::Serialize;
 
@@ -155,13 +155,12 @@ pub extern "system" fn Java_com_xaozora_manager_services_ProfileTileService_appl
     mut env: EnvUnowned,
     _class: JClass,
     profile_id: JString,
-) {
-    env.with_env(|env| -> jni::errors::Result<()> {
+) -> jboolean {
+    env.with_env(|env| -> jni::errors::Result<jboolean> {
         let profile = profile_id.try_to_string(env).unwrap();
-        apply_profile(&profile);
-        Ok(())
+        Ok(apply_profile(&profile).into())
     })
-    .resolve::<ThrowRuntimeExAndDefault>();
+    .resolve::<ThrowRuntimeExAndDefault>()
 }
 
 #[no_mangle]
