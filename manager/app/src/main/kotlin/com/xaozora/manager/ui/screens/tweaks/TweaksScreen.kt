@@ -104,6 +104,7 @@ fun TweaksScreen(
 
     var isSupportedKernel by remember { mutableStateOf(false) }
     var isHydraSupported by remember { mutableStateOf(false) }
+    var hydraEnabled by remember { mutableStateOf(false) }
     var bypassNode by remember { mutableStateOf("") }
     var manualBypassCharging by remember { mutableStateOf(false) }
 
@@ -154,9 +155,13 @@ fun TweaksScreen(
     val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
 
     LaunchedEffect(lifecycleState) {
+        if (!lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+            return@LaunchedEffect
+        }
         withContext(Dispatchers.IO) {
             optimizeGameThread = try { java.io.File(context.filesDir, "autd/autd_opt_allow").readText().trim() == "1" } catch (e: Exception) { false }
             idleCharging = try { java.io.File(context.filesDir, "autd/autd_idle_charging").readText().trim() == "1" } catch (e: Exception) { false }
+            hydraEnabled = try { java.io.File(context.filesDir, "autd/autd_hydra_enable").readText().trim() != "0" } catch (e: Exception) { false }
             
             isHydraSupported = RootShellHelper.checkFileExists("/proc/sys/kernel/hydra_pid")
             
@@ -182,11 +187,9 @@ fun TweaksScreen(
             chargeResumeLevel = savedResume.coerceIn(20, chargeStopLevel - 1)
             isChargeControlSupported = RootShellHelper.checkFileExists(defaultBypassNode)
         }
-        if (lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
-            while (true) {
-                fetchRamStats()
-                delay(2000)
-            }
+        while (true) {
+            fetchRamStats()
+            delay(2000)
         }
     }
 
@@ -400,7 +403,6 @@ fun TweaksScreen(
                     },
                     expandableContent = {
                         if (isHydraSupported) {
-                            var hydraEnabled by remember { mutableStateOf(try { java.io.File(context.filesDir, "autd/autd_hydra_enable").readText().trim() != "0" } catch(e: Exception) { true }) }
                             Column(modifier = Modifier.padding(top = 16.dp)) {
                                 HorizontalDivider(color = colorScheme.outlineVariant.copy(alpha = 0.5f))
                                 Spacer(modifier = Modifier.height(12.dp))
