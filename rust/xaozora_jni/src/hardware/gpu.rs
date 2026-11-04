@@ -4,7 +4,8 @@ use jni::{errors::ThrowRuntimeExAndDefault, EnvUnowned};
 use serde::{Deserialize, Serialize};
 
 use crate::utils::shell::{
-    check_file_exists, execute_cmd, execute_cmd_and_get_output, read_system_file,
+    check_file_exists, execute_cmd, execute_cmd_and_get_output, is_valid_frequency,
+    is_valid_governor, read_system_file, sh_quote,
 };
 
 const LEGACY_BASE: &str = "/sys/kernel/gpu";
@@ -54,8 +55,8 @@ fn scan_platform_mali() -> Option<String> {
 
 fn scan_devfreq(pattern: &str) -> Option<String> {
     let out = execute_cmd_and_get_output(&format!(
-        "ls /sys/class/devfreq 2>/dev/null | grep -m1 '{}'",
-        pattern
+        "ls /sys/class/devfreq 2>/dev/null | grep -m1 {}",
+        sh_quote(pattern)
     ));
     let name = out.trim();
     if name.is_empty() {
@@ -165,10 +166,10 @@ fn read_freq_list(path: &str) -> Vec<String> {
 }
 
 fn write_locked(path: &str, value: &str) {
+    let path = sh_quote(path);
     execute_cmd(&format!(
         "chmod 644 {path}; echo {value} > {path}; chmod 444 {path}",
-        path = path,
-        value = value
+        value = sh_quote(value)
     ));
 }
 
@@ -247,6 +248,19 @@ pub fn apply_gpu_config(
     governor: &str,
     adreno_boost: Option<&str>,
 ) {
+    if (!min_freq.is_empty() && !is_valid_frequency(min_freq))
+        || (!max_freq.is_empty() && !is_valid_frequency(max_freq))
+        || (!governor.is_empty() && !is_valid_governor(governor))
+    {
+        return;
+    }
+
+    if let Some(boost) = adreno_boost {
+        if !is_valid_frequency(boost) {
+            return;
+        }
+    }
+
     let backend = detect_gpu_backend();
 
     let (min_path, max_path, gov_path) = match &backend {
@@ -274,10 +288,12 @@ pub fn apply_gpu_config(
     }
 
     if let Some(boost) = adreno_boost {
-        if check_file_exists(&format!("{}/adrenoboost", LEGACY_DEVFREQ)) {
+        let path = format!("{}/adrenoboost", LEGACY_DEVFREQ);
+        if check_file_exists(&path) {
+            let quoted_path = sh_quote(&path);
             execute_cmd(&format!(
-                "chmod 644 {}/adrenoboost; echo {} > {}/adrenoboost; chmod 444 {}/adrenoboost",
-                LEGACY_DEVFREQ, boost, LEGACY_DEVFREQ, LEGACY_DEVFREQ
+                "chmod 644 {quoted_path}; echo {} > {quoted_path}; chmod 444 {quoted_path}",
+                sh_quote(boost)
             ));
         }
     }

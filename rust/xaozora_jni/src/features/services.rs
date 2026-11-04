@@ -3,7 +3,9 @@ use jni::sys::{jboolean, jstring};
 use jni::{errors::ThrowRuntimeExAndDefault, EnvUnowned};
 use serde::Serialize;
 
-use crate::utils::shell::{check_file_exists, execute_cmd, read_system_file};
+use crate::utils::shell::{
+    check_file_exists, execute_cmd, is_valid_profile_id, read_system_file, sh_quote,
+};
 
 const KNOWN_PROFILES: [&str; 5] = ["powersave", "balance", "gaming", "gaming2", "performance"];
 
@@ -66,10 +68,15 @@ pub fn get_available_profiles_for_files_dir(files_dir: &str) -> Vec<String> {
 }
 
 pub fn apply_profile(profile_id: &str) -> bool {
+    if !is_valid_profile_id(profile_id) {
+        return false;
+    }
+
     let autd_dir = "/data/data/com.xaozora.manager/files/autd";
     let cmd = format!(
-        "rm -f {0}/autd_base_mode; echo -n '{1}' > {0}/autd_base_mode",
-        autd_dir, profile_id
+        "rm -f {0}/autd_base_mode; echo -n {1} > {0}/autd_base_mode",
+        sh_quote(autd_dir),
+        sh_quote(profile_id)
     );
     execute_cmd(&cmd)
 }
@@ -78,8 +85,9 @@ pub fn update_power_save_state(is_power_save: bool) {
     let autd_dir = "/data/data/com.xaozora.manager/files/autd";
     let val = if is_power_save { "1" } else { "0" };
     execute_cmd(&format!(
-        "mkdir -p {}; echo -n '{}' > {}/autd_ps_state",
-        autd_dir, val, autd_dir
+        "mkdir -p {0}; echo -n {1} > {0}/autd_ps_state",
+        sh_quote(autd_dir),
+        sh_quote(val)
     ));
 }
 
@@ -95,7 +103,7 @@ pub fn reset_battery_stats(enable_autd: bool, enable_battmon: bool) {
     let battmon_arg = if enable_battmon {
         format!(
             "--battery-logger {}/battmon/battery_logger.jsonl",
-            files_dir
+            sh_quote(files_dir)
         )
     } else {
         String::new()
@@ -103,7 +111,9 @@ pub fn reset_battery_stats(enable_autd: bool, enable_battmon: bool) {
 
     let cmd = format!(
         "cd {} && nohup ./xaozora_daemon {} --reset-stats {} > /dev/null 2>&1 &",
-        files_dir, autd_arg, battmon_arg
+        sh_quote(files_dir),
+        autd_arg,
+        battmon_arg
     );
     execute_cmd(&cmd);
 }

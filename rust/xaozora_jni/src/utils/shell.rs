@@ -178,6 +178,37 @@ pub fn execute_script_and_get_output(cmds: &[&str]) -> Vec<String> {
     parts
 }
 
+pub fn sh_quote(value: &str) -> String {
+    let mut quoted = String::with_capacity(value.len() + 2);
+    quoted.push('\'');
+    for ch in value.chars() {
+        match ch {
+            '\'' => quoted.push_str("'\\''"),
+            _ => quoted.push(ch),
+        }
+    }
+    quoted.push('\'');
+    quoted
+}
+
+pub fn is_valid_profile_id(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+}
+
+pub fn is_valid_frequency(value: &str) -> bool {
+    !value.is_empty() && value.chars().all(|c| c.is_ascii_digit())
+}
+
+pub fn is_valid_governor(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+}
+
 fn read_file_direct(path: &str) -> Option<String> {
     std::fs::read_to_string(path)
         .ok()
@@ -189,7 +220,7 @@ pub fn read_system_file(path: &str) -> String {
         return content;
     }
 
-    let output = execute_cmd_and_get_output(&format!("cat {} 2>/dev/null", path));
+    let output = execute_cmd_and_get_output(&format!("cat {} 2>/dev/null", sh_quote(path)));
     if output.contains("No such file or directory") || output.contains("Permission denied") {
         return String::new();
     }
@@ -200,15 +231,17 @@ pub fn write_system_file(path: &str, value: &str) -> bool {
     if std::fs::write(path, format!("{}\n", value)).is_ok() {
         return true;
     }
-    execute_cmd(&format!("echo '{}' > {}", value, path))
+    execute_cmd(&format!("echo {} > {}", sh_quote(value), sh_quote(path)))
 }
 
 pub fn check_file_exists(path: &str) -> bool {
     if std::path::Path::new(path).exists() {
         return true;
     }
-    let res =
-        execute_cmd_and_get_output(&format!("if [ -e {} ]; then echo 1; else echo 0; fi", path));
+    let res = execute_cmd_and_get_output(&format!(
+        "if [ -e {} ]; then echo 1; else echo 0; fi",
+        sh_quote(path)
+    ));
     res.trim() == "1"
 }
 

@@ -3,7 +3,10 @@ use jni::sys::jstring;
 use jni::{errors::ThrowRuntimeExAndDefault, EnvUnowned};
 use serde::{Deserialize, Serialize};
 
-use crate::utils::shell::{execute_cmd, execute_cmd_and_get_output, read_system_file};
+use crate::utils::shell::{
+    execute_cmd, execute_cmd_and_get_output, is_valid_frequency, is_valid_governor,
+    read_system_file, sh_quote,
+};
 
 pub fn list_cpu_policies() -> Vec<u32> {
     let out = execute_cmd_and_get_output(
@@ -75,7 +78,15 @@ pub fn get_cluster_config(cluster_cpu_id: i32, name: &str) -> CpuClusterConfig {
 }
 
 pub fn apply_cluster_config(cluster_cpu_id: i32, min_freq: &str, max_freq: &str, governor: &str) {
+    if !is_valid_frequency(min_freq)
+        || !is_valid_frequency(max_freq)
+        || !is_valid_governor(governor)
+    {
+        return;
+    }
+
     let base_path = format!("/sys/devices/system/cpu/cpufreq/policy{}", cluster_cpu_id);
+    let base = sh_quote(&base_path);
 
     let cmd = format!(
         "chmod 644 {base}/scaling_min_freq {base}/scaling_max_freq {base}/scaling_governor; \
@@ -85,7 +96,9 @@ pub fn apply_cluster_config(cluster_cpu_id: i32, min_freq: &str, max_freq: &str,
          echo {min} > {base}/scaling_min_freq 2>/dev/null; \
          echo {gov} > {base}/scaling_governor 2>/dev/null; \
          chmod 444 {base}/scaling_min_freq {base}/scaling_max_freq {base}/scaling_governor 2>/dev/null",
-        base = base_path, max = max_freq, min = min_freq, gov = governor
+        max = sh_quote(max_freq),
+        min = sh_quote(min_freq),
+        gov = sh_quote(governor)
     );
 
     execute_cmd(&cmd);
