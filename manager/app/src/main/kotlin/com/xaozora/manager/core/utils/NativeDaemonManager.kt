@@ -115,8 +115,8 @@ object NativeDaemonManager {
             val autdInfoFile = File(context.filesDir, "autd/autd_awake_method.info")
             if (!autdInfoFile.exists()) autdInfoFile.createNewFile()
             
-            suCmd("chmod 666 ${autdInfoFile.absolutePath}")
-            suCmd("chmod -R 777 ${context.filesDir.absolutePath}/autd")
+            suCmd("chmod 644 ${autdInfoFile.absolutePath}")
+            suCmd("chmod -R u+rwX,go+rX ${context.filesDir.absolutePath}/autd")
             
             suCmd("chmod +x $executablePath")
             
