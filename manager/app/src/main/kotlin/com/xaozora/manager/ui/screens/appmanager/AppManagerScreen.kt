@@ -111,20 +111,11 @@ fun AppManagerScreen(
         }
     }
 
-    fun refreshApps() {
+    fun refreshApps(installed: List<AppInfoItem>) {
         scope.launch(Dispatchers.IO) {
-            val apps = AppManagerUtils.getConfiguredApps(context)
+            val apps = AppManagerUtils.getConfiguredApps(context, installed)
             val correctedApps = apps.map { config ->
-                val needsFallback = !AppProfiles.isSupported(config.mode)
-                if (needsFallback) {
-                    val packageName = config.app.packageName
-                        val appListPath = "${context.filesDir.absolutePath}/autd/applist"
-                        val cmd = "sed -i '/^${packageName}_/d' $appListPath; echo \"${packageName}_p\" >> $appListPath"
-                    RootShellHelper.executeCmd(cmd)
-                    config.copy(mode = "p")
-                } else {
-                    config
-                }
+                if (AppProfiles.isSupported(config.mode)) config else config.copy(mode = "p")
             }
 
             withContext(Dispatchers.Main) {
@@ -134,14 +125,28 @@ fun AppManagerScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        refreshApps()
-        withContext(Dispatchers.IO) {
-            val installed = AppManagerUtils.getInstalledApps(context)
-            withContext(Dispatchers.Main) {
-                allApps = installed
-            }
+    fun migrateLegacyProfiles(installed: List<AppInfoItem>) {
+        scope.launch(Dispatchers.IO) {
+            val appListPath = "${context.filesDir.absolutePath}/autd/applist"
+            AppManagerUtils.getConfiguredApps(context, installed)
+                .filter { !AppProfiles.isSupported(it.mode) }
+                .forEach { config ->
+                    val packageName = config.app.packageName
+                    val cmd = "sed -i '/^${packageName}_/d' $appListPath; echo \"${packageName}_p\" >> $appListPath"
+                    RootShellHelper.executeCmd(cmd)
+                }
         }
+    }
+
+    LaunchedEffect(Unit) {
+        val installed = withContext(Dispatchers.IO) {
+            AppManagerUtils.getInstalledApps(context)
+        }
+        withContext(Dispatchers.Main) {
+            allApps = installed
+        }
+        migrateLegacyProfiles(installed)
+        refreshApps(installed)
     }
 
     val addAppToConfig = { app: AppInfoItem ->
@@ -151,7 +156,7 @@ fun AppManagerScreen(
             val cmd = "echo \"${packageName}_p\" >> $appListPath"
             if (RootShellHelper.executeCmd(cmd)) {
                 scope.launch { snackbarHostState.showSnackbar("App added: ${app.name}") }
-                refreshApps()
+                refreshApps(allApps)
             } else {
                 scope.launch { snackbarHostState.showSnackbar("Failed to add app") }
             }
@@ -166,7 +171,7 @@ fun AppManagerScreen(
             if (RootShellHelper.executeCmd(cmd)) {
                 val modeLabel = AppProfiles.fromCode(newMode)?.label ?: newMode
                 scope.launch { snackbarHostState.showSnackbar("Profile changed to $modeLabel for ${app.name}") }
-                refreshApps()
+                refreshApps(allApps)
             } else {
                 scope.launch { snackbarHostState.showSnackbar("Failed to update profile") }
             }
@@ -179,7 +184,7 @@ fun AppManagerScreen(
             val cmd = "sed -i '/^${packageName}_/d' $appListPath"
             if (RootShellHelper.executeCmd(cmd)) {
                 scope.launch { snackbarHostState.showSnackbar("App removed from list") }
-                refreshApps()
+                refreshApps(allApps)
             } else {
                 scope.launch { snackbarHostState.showSnackbar("Failed to remove app") }
             }

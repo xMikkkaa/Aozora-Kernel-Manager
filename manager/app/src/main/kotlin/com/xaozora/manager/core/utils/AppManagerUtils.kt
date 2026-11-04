@@ -71,8 +71,10 @@ object AppManagerUtils {
         }.sortedBy { it.name.lowercase() }
     }
 
-    suspend fun getConfiguredApps(context: Context): List<ConfiguredApp> = withContext(Dispatchers.IO) {
-        val installedApps = getInstalledApps(context)
+    suspend fun getConfiguredApps(
+        context: Context,
+        installedApps: List<AppInfoItem>
+    ): List<ConfiguredApp> = withContext(Dispatchers.IO) {
         val appListFile = java.io.File(context.filesDir, "autd/applist")
         
         val jsonStr = getConfiguredAppsJson(appListFile.absolutePath)
