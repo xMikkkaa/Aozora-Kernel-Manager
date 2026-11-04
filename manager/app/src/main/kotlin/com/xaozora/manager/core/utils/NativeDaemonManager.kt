@@ -193,7 +193,21 @@ object NativeDaemonManager {
     }
 
     suspend fun killDaemon() {
-        suCmd("killall -9 $DAEMON_FILENAME; pkill -9 $DAEMON_FILENAME")
+        val script = """
+            for p in ${'$'}(pgrep -x $DAEMON_FILENAME); do
+                if grep -qa '$DAEMON_FILENAME' /proc/${'$'}p/cmdline; then kill -TERM ${'$'}p; fi
+            done
+            i=0
+            while [ ${'$'}i -lt 20 ]; do
+                pgrep -x $DAEMON_FILENAME >/dev/null || break
+                sleep 0.1
+                i=${'$'}((i + 1))
+            done
+            for p in ${'$'}(pgrep -x $DAEMON_FILENAME); do
+                if grep -qa '$DAEMON_FILENAME' /proc/${'$'}p/cmdline; then kill -KILL ${'$'}p; fi
+            done
+        """.trimIndent()
+        suCmd(script)
         invalidateAutdCache()
         kotlinx.coroutines.delay(500)
     }
