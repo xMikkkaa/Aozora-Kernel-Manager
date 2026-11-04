@@ -304,6 +304,45 @@ class MonitorService : Service() {
         }
     }
 
+    private fun maybeNotifyHighIdleDrain(
+        nm: NotificationManager,
+        prefs: android.content.SharedPreferences,
+        idleDrainRate: Double
+    ) {
+        if (!prefs.getBoolean("battery_notify_idle_drain", false) || idleDrainRate <= 0.0) return
+
+        val warning = prefs.getFloat("battery_idle_drain_warning", 2.0f)
+        if (idleDrainRate <= warning) return
+
+        val now = System.currentTimeMillis()
+        val lastAlertAt = prefs.getLong("battery_last_idle_drain_alert_at", 0L)
+        if (now - lastAlertAt < 60 * 60 * 1000L) return
+
+        prefs.edit().putLong("battery_last_idle_drain_alert_at", now).apply()
+
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+
+        val builder = Notification.Builder(this, CHANNEL_ID)
+            .setContentTitle("High idle drain detected")
+            .setContentText(
+                String.format(
+                    java.util.Locale.US,
+                    "%.2f %%/h is above your %.1f %%/h warning threshold.",
+                    idleDrainRate,
+                    warning
+                )
+            )
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+
+        nm.notify(891, builder.build())
+        Log.d(TAG, "Posted high idle drain alert at $idleDrainRate %/h")
+    }
+
     private fun updateBatteryNotification(nm: NotificationManager, prefs: android.content.SharedPreferences) {
         try {
             val showPercentIcon = prefs.getBoolean("battery_show_notif_icon", false)
@@ -375,6 +414,7 @@ class MonitorService : Service() {
 
             var activeDrain = "0.0 %/h"
             var idleDrain = "0.0 %/h"
+            var idleDrainRate = 0.0
             var screenOn = "0s"
             var screenOff = "0s"
             var deepSleep = "0s"
@@ -389,6 +429,7 @@ class MonitorService : Service() {
                     val stats = Gson().fromJson(content, BatteryStats::class.java)
                     activeDrain = String.format(java.util.Locale.US, "%.2f", stats.activeDrainRatePerHr)
                     idleDrain = String.format(java.util.Locale.US, "%.2f", stats.idleDrainRatePerHr)
+                    idleDrainRate = stats.idleDrainRatePerHr
                     
                     var capacity = stats.lastLearnedCapacityMah
                     if (capacity <= 0.0) {
@@ -421,6 +462,8 @@ class MonitorService : Service() {
             } catch (e: Exception) {
                 e.printStackTrace()
             }
+
+            maybeNotifyHighIdleDrain(nm, prefs, idleDrainRate)
 
             val inboxStyle = Notification.InboxStyle()
                 .addLine("Active drain: $activeDrain %/h • idle drain $idleDrain %/h")
