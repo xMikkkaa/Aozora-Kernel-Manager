@@ -71,7 +71,6 @@ import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 enum class PreparationStatus { CHECKING, GRANTED, MISSING }
@@ -128,23 +127,32 @@ fun PreparationScreen(
         ) PreparationStatus.GRANTED else PreparationStatus.MISSING
     }
 
+    var lastProbeAt by remember { mutableStateOf(0L) }
+
     LaunchedEffect(lifecycleState) {
         if (lifecycleState.isAtLeast(Lifecycle.State.RESUMED)) {
-            while (true) {
-                refreshNotification()
-                withContext(Dispatchers.IO) {
+            refreshNotification()
+            withContext(Dispatchers.IO) {
+                val now = System.currentTimeMillis()
+                val cacheWindow = if (rootStatus == PreparationStatus.MISSING) 60_000L else 30_000L
+                if (now - lastProbeAt >= cacheWindow) {
+                    lastProbeAt = now
                     val isRooted = RootShellHelper.executeCmdAndGetOutput("id -u").trim() == "0"
                     rootStatus = if (isRooted) PreparationStatus.GRANTED else PreparationStatus.MISSING
 
-                    val moduleInstalled = RootShellHelper.executeCmdAndGetOutput(
-                        "grep -l 'id=.*aozora' /data/adb/modules/*/module.prop 2>/dev/null"
-                    ).isNotBlank()
-                    moduleStatus = if (moduleInstalled) PreparationStatus.GRANTED else PreparationStatus.MISSING
+                    if (isRooted) {
+                        val moduleInstalled = RootShellHelper.executeCmdAndGetOutput(
+                            "grep -l 'id=.*aozora' /data/adb/modules/*/module.prop 2>/dev/null"
+                        ).isNotBlank()
+                        moduleStatus = if (moduleInstalled) PreparationStatus.GRANTED else PreparationStatus.MISSING
 
-                    val daemonPresent = RootShellHelper.checkFileExists("${context.filesDir.path}/xaozora_daemon")
-                    daemonStatus = if (daemonPresent) PreparationStatus.GRANTED else PreparationStatus.MISSING
+                        val daemonPresent = RootShellHelper.checkFileExists("${context.filesDir.path}/xaozora_daemon")
+                        daemonStatus = if (daemonPresent) PreparationStatus.GRANTED else PreparationStatus.MISSING
+                    } else {
+                        moduleStatus = PreparationStatus.MISSING
+                        daemonStatus = PreparationStatus.MISSING
+                    }
                 }
-                delay(2000)
             }
         }
     }
