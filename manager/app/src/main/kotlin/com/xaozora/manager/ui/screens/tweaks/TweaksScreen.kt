@@ -261,7 +261,7 @@ fun TweaksScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "This will force-stop third-party apps, kill high-memory background processes, clear cached data, and trim storage. Unsaved app state may be lost.",
+                            text = "This will force-stop third-party apps, kill high-memory background processes, and clear cached data. Unsaved app state may be lost.",
                             style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
                         )
                         Spacer(modifier = Modifier.height(24.dp))
