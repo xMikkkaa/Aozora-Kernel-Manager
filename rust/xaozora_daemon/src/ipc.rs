@@ -4,8 +4,11 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::unix::io::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::Command;
+use std::sync::atomic::Ordering;
 use std::thread;
+use std::time::Duration;
 
+use crate::RUNNING;
 use crate::config;
 
 const SOCKET_PATH: &str = "/data/data/com.xaozora.manager/files/aozora_ipc.sock";
@@ -76,13 +79,18 @@ pub fn start_ipc_server() {
         }
     };
 
+    let _ = listener.set_nonblocking(true);
     apply_socket_permissions();
     let app_uid = config::app_owner_ids().map(|(uid, _)| uid);
 
-    for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
+    while RUNNING.load(Ordering::SeqCst) {
+        match listener.accept() {
+            Ok((stream, _)) => {
+                let _ = stream.set_nonblocking(false);
                 thread::spawn(move || handle_client(stream, app_uid));
+            }
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(100));
             }
             Err(e) => {
                 println!("IPC socket error: {}", e);
@@ -90,6 +98,8 @@ pub fn start_ipc_server() {
             }
         }
     }
+
+    let _ = fs::remove_file(SOCKET_PATH);
 }
 
 fn handle_client(mut stream: UnixStream, app_uid: Option<u32>) {
@@ -103,6 +113,7 @@ fn handle_client(mut stream: UnixStream, app_uid: Option<u32>) {
         return;
     }
 
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
     let mut buffer = [0; 4096];
     let mut protocol_v2 = false;
     loop {
