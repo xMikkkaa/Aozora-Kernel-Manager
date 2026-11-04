@@ -81,10 +81,8 @@ fun BatteryScreen(
                         if (file.exists()) {
                             val content = file.readText().trim()
                             if (content.isNotBlank()) {
-                                android.util.Log.d("BatteryScreen", "Raw JSON: $content")
                                 val stats = Gson().fromJson(content, BatteryStats::class.java)
                                 batteryStats = stats
-                                android.util.Log.d("BatteryScreen", "Parsed stats: $stats")
                             } else {
                                 android.util.Log.w("BatteryScreen", "JSON file is empty")
                             }
