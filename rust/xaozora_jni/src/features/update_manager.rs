@@ -1,9 +1,7 @@
 use jni::objects::{JClass, JString};
-use jni::sys::{jboolean, jstring};
+use jni::sys::jstring;
 use jni::{errors::ThrowRuntimeExAndDefault, EnvUnowned};
 use serde::{Deserialize, Serialize};
-
-use crate::utils::shell::execute_cmd;
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct AppUpdateResult {
@@ -108,50 +106,6 @@ fn is_version_greater(new_ver: &str, old_ver: &str) -> bool {
     false
 }
 
-pub fn perform_app_update(apk_url: &str, apk_temp_path: &str) -> bool {
-    let response = match ureq::get(apk_url)
-        .header("User-Agent", "Aozora-Kernel-Manager")
-        .call()
-    {
-        Ok(res) => res,
-        Err(_) => return false,
-    };
-
-    let mut out = match std::fs::File::create(apk_temp_path) {
-        Ok(f) => f,
-        Err(_) => return false,
-    };
-
-    let body = match response.into_body().read_to_vec() {
-        Ok(body) => body,
-        Err(_) => return false,
-    };
-
-    if std::io::Write::write_all(&mut out, &body).is_err() {
-        return false;
-    }
-
-    let shell_script = format!(
-        r#"
-        cp "{0}" /data/local/tmp/aozora_update.apk
-        chmod 777 /data/local/tmp/aozora_update.apk
-        
-        (
-          pm install -r -d /data/local/tmp/aozora_update.apk
-          
-          rm -f "{0}"
-          rm -f /data/local/tmp/aozora_update.apk
-          
-          sleep 1
-          am start -n com.xaozora.manager/.MainActivity
-        ) >/dev/null 2>&1 &
-        "#,
-        apk_temp_path
-    );
-
-    execute_cmd(&shell_script)
-}
-
 #[no_mangle]
 pub extern "system" fn Java_com_xaozora_manager_core_network_UpdateManager_checkUpdatesJson<
     'local,
@@ -169,23 +123,6 @@ pub extern "system" fn Java_com_xaozora_manager_core_network_UpdateManager_check
 
         let output = env.new_string(json_str).unwrap();
         Ok(output.into_raw())
-    })
-    .resolve::<ThrowRuntimeExAndDefault>()
-}
-
-#[no_mangle]
-pub extern "system" fn Java_com_xaozora_manager_core_network_UpdateManager_performAppUpdate<
-    'local,
->(
-    mut env: EnvUnowned<'local>,
-    _class: JClass,
-    apk_url: JString,
-    apk_temp_path: JString,
-) -> jboolean {
-    env.with_env(|env| -> jni::errors::Result<jboolean> {
-        let url = apk_url.try_to_string(env).unwrap();
-        let path = apk_temp_path.try_to_string(env).unwrap();
-        Ok(perform_app_update(&url, &path))
     })
     .resolve::<ThrowRuntimeExAndDefault>()
 }
