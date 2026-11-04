@@ -70,20 +70,34 @@ pub fn run_autd() {
 
     let fifo_path = config::AUTD_EVENT_PIPE;
     let _ = fs::remove_file(fifo_path);
-    let c_path = std::ffi::CString::new(fifo_path).unwrap();
-    unsafe {
-        libc::mkfifo(c_path.as_ptr(), 0o666);
+    let Ok(c_path) = std::ffi::CString::new(fifo_path) else {
+        println!("AUTD: invalid event pipe path");
+        perform_cleanup();
+        return;
+    };
+    let mkfifo_result = unsafe { libc::mkfifo(c_path.as_ptr(), 0o666) };
+    if mkfifo_result != 0 && !std::path::Path::new(fifo_path).exists() {
+        println!("AUTD: failed to create the event pipe");
+        perform_cleanup();
+        return;
     }
     let _ = std::process::Command::new("chmod")
         .arg("666")
         .arg(fifo_path)
         .status();
 
-    let mut fifo_file = fs::OpenOptions::new()
+    let mut fifo_file = match fs::OpenOptions::new()
         .read(true)
         .write(true)
         .open(fifo_path)
-        .expect("Failed to open AUTD event pipe");
+    {
+        Ok(file) => file,
+        Err(e) => {
+            println!("AUTD: failed to open the event pipe: {}", e);
+            perform_cleanup();
+            return;
+        }
+    };
 
     use std::os::unix::io::AsRawFd;
     let fifo_fd = fifo_file.as_raw_fd();
