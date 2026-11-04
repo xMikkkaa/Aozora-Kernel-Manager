@@ -158,7 +158,7 @@ pub extern "system" fn Java_com_xaozora_manager_services_ProfileTileService_appl
 ) -> jboolean {
     env.with_env(|env| -> jni::errors::Result<jboolean> {
         let profile = profile_id.try_to_string(env).unwrap();
-        Ok(apply_profile(&profile).into())
+        Ok(apply_profile(&profile))
     })
     .resolve::<ThrowRuntimeExAndDefault>()
 }
