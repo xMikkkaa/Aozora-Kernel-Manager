@@ -54,8 +54,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.xaozora.manager.ui.navigation.Screen
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
 
 @Composable
@@ -74,14 +72,7 @@ fun AozoraBottomNav(
 
     val primaryScreens = remember(screens) { screens.filter { it != Screen.Settings } }
 
-    val surfaceContainer = MaterialTheme.colorScheme.surfaceContainer
-    val strongBlurStyle = remember(surfaceContainer) {
-        HazeStyle(
-            blurRadius = 25.dp,
-            noiseFactor = 0.1f,
-            tints = listOf(HazeTint(surfaceContainer.copy(alpha = 0.25f)))
-        )
-    }
+    val strongBlurStyle = rememberStrongBlur()
 
     Box(
         modifier = modifier.fillMaxWidth(),

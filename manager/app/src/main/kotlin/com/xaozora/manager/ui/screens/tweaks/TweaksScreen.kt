@@ -66,9 +66,8 @@ import com.xaozora.manager.core.shell.RootShellHelper
 import com.xaozora.manager.core.utils.SystemInfoUtils
 import com.xaozora.manager.ui.components.GlassCard
 import com.xaozora.manager.ui.components.ToggleCard
+import com.xaozora.manager.ui.components.rememberStrongBlur
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -229,14 +228,7 @@ fun TweaksScreen(
     }
 
     if (showFlushDialog) {
-        val surfaceContainer = MaterialTheme.colorScheme.surfaceContainer
-        val dialogStyle = remember(surfaceContainer) {
-            HazeStyle(
-                blurRadius = 25.dp,
-                noiseFactor = 0.1f,
-                tints = listOf(HazeTint(surfaceContainer.copy(alpha = 0.25f)))
-            )
-        }
+        val dialogStyle = rememberStrongBlur()
 
         Dialog(
             onDismissRequest = { showFlushDialog = false },

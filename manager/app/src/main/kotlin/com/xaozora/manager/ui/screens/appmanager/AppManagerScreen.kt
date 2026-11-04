@@ -78,6 +78,7 @@ import com.xaozora.manager.core.utils.AppProfile
 import com.xaozora.manager.core.utils.AppProfiles
 import com.xaozora.manager.core.utils.ConfiguredApp
 import com.xaozora.manager.ui.components.GlassCard
+import com.xaozora.manager.ui.components.rememberStrongBlur
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
@@ -241,14 +242,7 @@ fun AppManagerScreen(
     }
 
     if (showAddSheet) {
-        val surfaceContainer = MaterialTheme.colorScheme.surfaceContainer
-        val sheetStyle = remember(surfaceContainer) {
-            HazeStyle(
-                blurRadius = 25.dp,
-                noiseFactor = 0.1f,
-                tints = listOf(HazeTint(surfaceContainer.copy(alpha = 0.25f)))
-            )
-        }
+        val sheetStyle = rememberStrongBlur()
 
         ModalBottomSheet(
             onDismissRequest = { showAddSheet = false },
@@ -291,14 +285,7 @@ fun AppManagerScreen(
     }
 
     appToEdit?.let { config ->
-        val surfaceContainer = MaterialTheme.colorScheme.surfaceContainer
-        val sheetStyle = remember(surfaceContainer) {
-            HazeStyle(
-                blurRadius = 25.dp,
-                noiseFactor = 0.1f,
-                tints = listOf(HazeTint(surfaceContainer.copy(alpha = 0.25f)))
-            )
-        }
+        val sheetStyle = rememberStrongBlur()
 
         ModalBottomSheet(
             onDismissRequest = { appToEdit = null },

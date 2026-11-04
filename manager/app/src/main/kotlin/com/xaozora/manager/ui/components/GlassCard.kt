@@ -21,8 +21,6 @@ import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
 
 @Composable
@@ -32,14 +30,7 @@ fun GlassCard(
     shape: Shape = RoundedCornerShape(24.dp),
     content: @Composable BoxScope.() -> Unit
 ) {
-    val surfaceContainer = MaterialTheme.colorScheme.surfaceContainer
-    val strongBlurStyle = androidx.compose.runtime.remember(surfaceContainer) {
-        HazeStyle(
-            blurRadius = 25.dp,
-            noiseFactor = 0.1f,
-            tints = listOf(HazeTint(surfaceContainer.copy(alpha = 0.25f)))
-        )
-    }
+    val strongBlurStyle = rememberStrongBlur()
 
     Box(modifier = modifier.clip(shape)) {
         Box(
