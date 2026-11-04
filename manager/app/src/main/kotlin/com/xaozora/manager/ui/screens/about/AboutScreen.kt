@@ -5,14 +5,12 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.graphics.BlurMaskFilter
 import android.widget.Toast
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,7 +27,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -70,7 +67,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -81,6 +77,7 @@ import com.xaozora.manager.core.shell.RootShellHelper
 import com.xaozora.manager.core.network.UpdateManager
 import com.xaozora.manager.core.network.UpdateCheckResult
 import com.xaozora.manager.ui.components.GlassCard
+import com.xaozora.manager.ui.components.ToggleCard
 import com.xaozora.manager.ui.components.UpdateDialog
 import dev.chrisbanes.haze.HazeState
 import androidx.compose.material3.SnackbarHostState
@@ -219,7 +216,7 @@ fun AboutScreen(
         Text("Updates", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
         Spacer(modifier = Modifier.height(12.dp))
 
-        AboutToggleCard(
+        ToggleCard(
             title = "Auto Check for Updates",
             subtitle = "Automatically check for app updates on startup.",
             icon = Icons.Rounded.Update,
@@ -488,51 +485,6 @@ private fun GlassyButton(
             modifier = Modifier.padding(horizontal = 24.dp)
         ) {
             content()
-        }
-    }
-}
-
-@Composable
-private fun AboutToggleCard(
-    title: String,
-    subtitle: String,
-    icon: ImageVector,
-    checked: Boolean,
-    hazeState: HazeState,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    val colorScheme = MaterialTheme.colorScheme
-    val bgColor by animateColorAsState(if (checked) colorScheme.primaryContainer.copy(alpha = 0.25f) else colorScheme.surfaceContainer, label = "bg")
-    val borderColor by animateColorAsState(if (checked) colorScheme.primary.copy(alpha = 0.4f) else colorScheme.outlineVariant.copy(alpha = 0.5f), label = "border")
-    val iconBgColor by animateColorAsState(if (checked) colorScheme.primary.copy(alpha = 0.2f) else colorScheme.surfaceContainerHighest.copy(alpha = 0.5f), label = "iconBg")
-    val iconColor by animateColorAsState(if (checked) colorScheme.primary else colorScheme.secondary, label = "iconColor")
-    
-    val switchOffset by animateDpAsState(if (checked) 24.dp else 0.dp, label = "switchOffset")
-    val switchBg by animateColorAsState(if (checked) colorScheme.primary else colorScheme.surfaceContainerHighest, label = "switchBg")
-    val thumbColor by animateColorAsState(if (checked) colorScheme.onPrimary else colorScheme.outline, label = "thumbColor")
-
-    GlassCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .clickable { onCheckedChange(!checked) }
-            .border(1.2.dp, borderColor, RoundedCornerShape(24.dp)),
-        hazeState = hazeState,
-        shape = RoundedCornerShape(24.dp)
-    ) {
-        Box(modifier = Modifier.fillMaxWidth().background(if (checked) bgColor else Color.Transparent).padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.background(iconBgColor, CircleShape).padding(12.dp)) { Icon(icon, contentDescription = null, tint = iconColor) }
-                Spacer(modifier = Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = if (checked) colorScheme.onPrimaryContainer else colorScheme.onSurface))
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(subtitle, style = MaterialTheme.typography.bodySmall.copy(color = if (checked) colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else colorScheme.onSurfaceVariant))
-                }
-                Box(modifier = Modifier.size(52.dp, 28.dp).background(switchBg, CircleShape).border(1.dp, if (checked) colorScheme.primary else colorScheme.outlineVariant.copy(alpha = 0.5f), CircleShape).padding(4.dp), contentAlignment = Alignment.CenterStart) {
-                    Box(modifier = Modifier.offset { IntOffset(switchOffset.roundToPx(), 0) }.size(20.dp).background(thumbColor, CircleShape))
-                }
-            }
         }
     }
 }

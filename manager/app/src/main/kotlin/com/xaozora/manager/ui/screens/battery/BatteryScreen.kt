@@ -39,6 +39,7 @@ import com.xaozora.manager.core.models.BatteryStats
 import com.xaozora.manager.core.shell.RootShellHelper
 import com.xaozora.manager.ui.components.BatteryDialog
 import com.xaozora.manager.ui.components.GlassCard
+import com.xaozora.manager.ui.components.ToggleCard
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.Dispatchers
@@ -330,7 +331,7 @@ fun BatteryOptionTab(hazeState: HazeState, resetPercentage: Float, onShowPercent
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        OptionToggleCard(
+        ToggleCard(
             title = "Battery Monitor Service",
             subtitle = "Runs a background service to collect detailed battery statistics.",
             checked = monitorService,
@@ -347,7 +348,7 @@ fun BatteryOptionTab(hazeState: HazeState, resetPercentage: Float, onShowPercent
             }
         }
 
-        OptionToggleCard(
+        ToggleCard(
             title = "Reset Stats at/above Percentage",
             subtitle = "Automatically resets battery statistics when charge level reaches a certain percentage.",
             checked = resetOnPercentage,
@@ -381,7 +382,7 @@ fun BatteryOptionTab(hazeState: HazeState, resetPercentage: Float, onShowPercent
             }
         }
 
-        OptionToggleCard(
+        ToggleCard(
             title = "Reset Stats when Plugged In",
             subtitle = "Clears current battery statistics every time the charger is connected.",
             checked = resetOnPluggedIn,
@@ -390,7 +391,7 @@ fun BatteryOptionTab(hazeState: HazeState, resetPercentage: Float, onShowPercent
             resetOnPluggedIn = it; savePref("battery_reset_plugged_in", it)
         }
 
-        OptionToggleCard(
+        ToggleCard(
             title = "Reset Stats on Reboot/Shutdown",
             subtitle = "Wipes the battery statistics when the device restarts or turns off.",
             checked = resetOnReboot,
@@ -399,7 +400,7 @@ fun BatteryOptionTab(hazeState: HazeState, resetPercentage: Float, onShowPercent
             resetOnReboot = it; savePref("battery_reset_reboot", it)
         }
 
-        OptionToggleCard(
+        ToggleCard(
             title = "Notify if Idle Drain is High",
             subtitle = "Sends an alert if battery drain exceeds the specified warning threshold while screen is off.",
             checked = notifyIdleDrain,
@@ -450,7 +451,7 @@ fun BatteryOptionTab(hazeState: HazeState, resetPercentage: Float, onShowPercent
             }
         }
 
-        OptionToggleCard(
+        ToggleCard(
             title = "Show Battery % as Notification Icon",
             subtitle = "Displays the current battery percentage continuously in the status bar notification area.",
             checked = showNotifIcon,
@@ -459,7 +460,7 @@ fun BatteryOptionTab(hazeState: HazeState, resetPercentage: Float, onShowPercent
             showNotifIcon = it; savePref("battery_show_notif_icon", it)
         }
 
-        OptionToggleCard(
+        ToggleCard(
             title = "Show Charging Ampere and Wattage",
             subtitle = "Note: Not 100% accurate, for reference only.",
             checked = showWattage,
@@ -528,48 +529,6 @@ fun StatRow(label: String, value: String) {
     ) {
         Text(text = label, style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
         Text(text = value, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
-    }
-}
-
-@Composable
-fun OptionToggleCard(title: String, subtitle: String = "", checked: Boolean, hazeState: HazeState, onCheckedChange: (Boolean) -> Unit) {
-    val colorScheme = MaterialTheme.colorScheme
-    val bgColor by androidx.compose.animation.animateColorAsState(if (checked) colorScheme.primaryContainer.copy(alpha = 0.25f) else colorScheme.surfaceContainer, label = "bg")
-    val borderColor by androidx.compose.animation.animateColorAsState(if (checked) colorScheme.primary.copy(alpha = 0.4f) else colorScheme.outlineVariant.copy(alpha = 0.5f), label = "border")
-    val iconBgColor by androidx.compose.animation.animateColorAsState(if (checked) colorScheme.primaryContainer else colorScheme.surfaceContainerHighest.copy(alpha = 0.5f), label = "iconBg")
-    val iconColor by androidx.compose.animation.animateColorAsState(if (checked) colorScheme.onPrimaryContainer else colorScheme.secondary, label = "iconColor")
-    
-    val switchOffset by androidx.compose.animation.core.animateDpAsState(if (checked) 24.dp else 0.dp, label = "switchOffset")
-    val switchBg by androidx.compose.animation.animateColorAsState(if (checked) colorScheme.primaryContainer else colorScheme.surfaceContainerHighest, label = "switchBg")
-    val thumbColor by androidx.compose.animation.animateColorAsState(if (checked) colorScheme.onPrimaryContainer else colorScheme.outline, label = "thumbColor")
-
-    GlassCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .clickable { onCheckedChange(!checked) }
-            .border(1.2.dp, borderColor, RoundedCornerShape(24.dp)),
-        hazeState = hazeState,
-        shape = RoundedCornerShape(24.dp)
-    ) {
-        Box(modifier = Modifier.fillMaxWidth().background(if (checked) bgColor else Color.Transparent).padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.background(iconBgColor, CircleShape).padding(12.dp)) { 
-                    Icon(androidx.compose.material.icons.Icons.Rounded.Settings, contentDescription = null, tint = iconColor) 
-                }
-                Spacer(modifier = Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = if (checked) colorScheme.onPrimaryContainer else colorScheme.onSurface))
-                    if (subtitle.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(subtitle, style = MaterialTheme.typography.bodySmall.copy(color = if (checked) colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else colorScheme.onSurfaceVariant))
-                    }
-                }
-                Box(modifier = Modifier.size(52.dp, 28.dp).background(switchBg, CircleShape).border(1.dp, if (checked) colorScheme.primary.copy(alpha = 0.4f) else colorScheme.outlineVariant.copy(alpha = 0.5f), CircleShape).padding(4.dp), contentAlignment = Alignment.CenterStart) {
-                    Box(modifier = Modifier.offset(x = switchOffset).size(20.dp).background(thumbColor, CircleShape))
-                }
-            }
-        }
     }
 }
 

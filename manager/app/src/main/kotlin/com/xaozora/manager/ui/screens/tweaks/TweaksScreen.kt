@@ -1,7 +1,5 @@
 package com.xaozora.manager.ui.screens.tweaks
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,7 +15,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -57,7 +54,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -69,6 +65,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import com.xaozora.manager.core.shell.RootShellHelper
 import com.xaozora.manager.core.utils.SystemInfoUtils
 import com.xaozora.manager.ui.components.GlassCard
+import com.xaozora.manager.ui.components.ToggleCard
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
@@ -380,7 +377,7 @@ fun TweaksScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
 
-                CustomToggleCard(
+                ToggleCard(
                     title = "Optimize Game Thread",
                     subtitle = "Prioritize game processes for better performance.",
                     icon = Icons.Rounded.Games,
@@ -441,7 +438,7 @@ fun TweaksScreen(
                 )
                 if (isChargeControlSupported) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    CustomToggleCard(
+                    ToggleCard(
                         title = "Charging Control",
                         subtitle = if (chargeControlEnabled) {
                             "Pauses charging at $chargeStopLevel% and resumes at $chargeResumeLevel%."
@@ -504,7 +501,7 @@ fun TweaksScreen(
                     )
                 }
                 Spacer(modifier = Modifier.height(12.dp))
-                CustomToggleCard(
+                ToggleCard(
                     title = "Bypass Charging While Gaming",
                     subtitle = "Stop charging to reduce heat while gaming.",
                     icon = Icons.Rounded.BatteryChargingFull,
@@ -536,7 +533,7 @@ fun TweaksScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                 }
                 
-                CustomToggleCard(
+                ToggleCard(
                     title = "Manual Bypass Charging",
                     subtitle = "Stop charging to reduce heat while plugged in.",
                     icon = Icons.Rounded.BatteryChargingFull,
@@ -607,58 +604,6 @@ private fun disableManualBypass(context: android.content.Context, bypassNode: St
     }
 
     return RootShellHelper.writeSystemFile(bypassNode, "0")
-}
-
-@Composable
-private fun CustomToggleCard(
-    title: String,
-    subtitle: String,
-    icon: ImageVector,
-    checked: Boolean,
-    hazeState: HazeState,
-    onCheckedChange: (Boolean) -> Unit,
-    showExpandableWhenOff: Boolean = false,
-    expandableContent: @Composable () -> Unit = {}
-) {
-    val colorScheme = MaterialTheme.colorScheme
-    val bgColor by animateColorAsState(if (checked) colorScheme.primaryContainer.copy(alpha = 0.25f) else colorScheme.surfaceContainer, label = "bg")
-    val borderColor by animateColorAsState(if (checked) colorScheme.primary.copy(alpha = 0.4f) else colorScheme.outlineVariant.copy(alpha = 0.5f), label = "border")
-    val iconBgColor by animateColorAsState(if (checked) colorScheme.primaryContainer else colorScheme.surfaceContainerHighest.copy(alpha = 0.5f), label = "iconBg")
-    val iconColor by animateColorAsState(if (checked) colorScheme.onPrimaryContainer else colorScheme.secondary, label = "iconColor")
-    
-    val switchOffset by animateDpAsState(if (checked) 24.dp else 0.dp, label = "switchOffset")
-    val switchBg by animateColorAsState(if (checked) colorScheme.primaryContainer else colorScheme.surfaceContainerHighest, label = "switchBg")
-    val thumbColor by animateColorAsState(if (checked) colorScheme.onPrimaryContainer else colorScheme.outline, label = "thumbColor")
-
-    GlassCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .clickable { onCheckedChange(!checked) }
-            .border(1.2.dp, borderColor, RoundedCornerShape(24.dp)),
-        hazeState = hazeState,
-        shape = RoundedCornerShape(24.dp)
-    ) {
-        Box(modifier = Modifier.fillMaxWidth().background(if (checked) bgColor else Color.Transparent).padding(16.dp)) {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(modifier = Modifier.background(iconBgColor, CircleShape).padding(12.dp)) { Icon(icon, contentDescription = null, tint = iconColor) }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = if (checked) colorScheme.onPrimaryContainer else colorScheme.onSurface))
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(subtitle, style = MaterialTheme.typography.bodySmall.copy(color = if (checked) colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else colorScheme.onSurfaceVariant))
-                    }
-                    Box(modifier = Modifier.size(52.dp, 28.dp).background(switchBg, CircleShape).border(1.dp, if (checked) colorScheme.primary.copy(alpha = 0.4f) else colorScheme.outlineVariant.copy(alpha = 0.5f), CircleShape).padding(4.dp), contentAlignment = Alignment.CenterStart) {
-                        Box(modifier = Modifier.offset(x = switchOffset).size(20.dp).background(thumbColor, CircleShape))
-                    }
-                }
-                androidx.compose.animation.AnimatedVisibility(visible = checked || showExpandableWhenOff) {
-                    expandableContent()
-                }
-            }
-        }
-    }
 }
 
 @Composable
