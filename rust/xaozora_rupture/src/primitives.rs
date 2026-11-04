@@ -17,6 +17,10 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+const MAX_LOGGED_SETVALUE_FAILURES: usize = 20;
+static SETVALUE_FAILURES: AtomicUsize = AtomicUsize::new(0);
 
 pub fn shell(cmd: &str) {
     let _ = Command::new("sh")
@@ -38,21 +42,47 @@ pub fn shell_output(cmd: &str) -> String {
         .unwrap_or_default()
 }
 
-pub fn setvalue(value: &str, path: &str) {
-    if path.is_empty() {
+fn log_setvalue_failure(path: &str, error: &std::io::Error) {
+    if !std::path::Path::new(path).exists() {
         return;
     }
-    let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o644));
-    let _ = fs::write(path, value);
-    let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o444));
+
+    let failures = SETVALUE_FAILURES.fetch_add(1, Ordering::Relaxed);
+    if failures < MAX_LOGGED_SETVALUE_FAILURES {
+        eprintln!("setvalue: failed to write {}: {}", path, error);
+    }
 }
 
-pub fn setvalue_unlocked(value: &str, path: &str) {
+pub fn setvalue(value: &str, path: &str) -> bool {
     if path.is_empty() {
-        return;
+        return false;
     }
     let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o644));
-    let _ = fs::write(path, value);
+    let write_result = fs::write(path, value);
+    let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o444));
+
+    match write_result {
+        Ok(()) => true,
+        Err(e) => {
+            log_setvalue_failure(path, &e);
+            false
+        }
+    }
+}
+
+pub fn setvalue_unlocked(value: &str, path: &str) -> bool {
+    if path.is_empty() {
+        return false;
+    }
+    let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o644));
+
+    match fs::write(path, value) {
+        Ok(()) => true,
+        Err(e) => {
+            log_setvalue_failure(path, &e);
+            false
+        }
+    }
 }
 
 pub fn list_policies() -> Vec<u32> {
