@@ -1,61 +1,119 @@
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
+use std::time::Duration;
 
 const SOCKET_PATH: &str = "/data/data/com.xaozora.manager/files/aozora_ipc.sock";
+const PROTOCOL_V2_HANDSHAKE: &str = "XA0Z0RA_V2";
+const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
+const MAX_HEADER_BYTES: usize = 128;
 
-fn send_ipc_command(cmd: &str) -> Option<String> {
-    let mut stream = match UnixStream::connect(SOCKET_PATH) {
-        Ok(s) => s,
-        Err(_) => return None,
-    };
+struct CmdResult {
+    code: i32,
+    output: String,
+}
 
-    let mut payload = cmd.to_string().into_bytes();
-    payload.push(0);
+fn read_response_header(stream: &mut UnixStream) -> Option<(i32, usize)> {
+    let mut header = Vec::new();
+    let mut byte = [0u8; 1];
 
-    if stream.write_all(&payload).is_err() {
+    loop {
+        if header.len() >= MAX_HEADER_BYTES {
+            return None;
+        }
+
+        match stream.read(&mut byte) {
+            Ok(0) => return None,
+            Ok(_) => {
+                if byte[0] == b'\n' {
+                    break;
+                }
+                header.push(byte[0]);
+            }
+            Err(_) => return None,
+        }
+    }
+
+    let header = String::from_utf8(header).ok()?;
+    let mut code = None;
+    let mut len = None;
+
+    for part in header.split(';') {
+        let (key, value) = part.split_once('=')?;
+        match key {
+            "code" => code = value.parse::<i32>().ok(),
+            "len" => len = value.parse::<usize>().ok(),
+            _ => {}
+        }
+    }
+
+    let code = code?;
+    let len = len?;
+    if len > MAX_RESPONSE_BYTES {
         return None;
     }
 
-    let mut result = Vec::new();
-    let mut buffer = [0; 4096];
+    Some((code, len))
+}
 
-    loop {
-        match stream.read(&mut buffer) {
-            Ok(0) => break,
-            Ok(n) => {
-                result.extend_from_slice(&buffer[..n]);
-                if result.ends_with(b"\0EOF\0") {
-                    result.truncate(result.len() - 5);
-                    break;
-                }
-            }
-            Err(_) => break,
-        }
+fn connect_v2() -> Option<UnixStream> {
+    let mut stream = UnixStream::connect(SOCKET_PATH).ok()?;
+    stream
+        .set_read_timeout(Some(Duration::from_millis(1000)))
+        .ok()?;
+
+    let mut probe = Vec::new();
+    probe.extend_from_slice(PROTOCOL_V2_HANDSHAKE.as_bytes());
+    probe.push(0);
+    probe.extend_from_slice(b"true\0");
+
+    stream.write_all(&probe).ok()?;
+
+    match read_response_header(&mut stream) {
+        Some((0, 0)) => {}
+        _ => return None,
     }
 
-    Some(String::from_utf8_lossy(&result).into_owned())
+    stream.set_read_timeout(None).ok()?;
+    Some(stream)
+}
+
+fn send_ipc_command(cmd: &str) -> Option<CmdResult> {
+    let mut stream = connect_v2()?;
+
+    let mut payload = cmd.as_bytes().to_vec();
+    payload.push(0);
+    stream.write_all(&payload).ok()?;
+
+    let (code, len) = read_response_header(&mut stream)?;
+    let mut body = vec![0u8; len];
+    if len > 0 && stream.read_exact(&mut body).is_err() {
+        return None;
+    }
+
+    Some(CmdResult {
+        code,
+        output: String::from_utf8_lossy(&body).into_owned(),
+    })
 }
 
 pub fn execute_cmd(cmd: &str) -> bool {
-    if let Some(output) = send_ipc_command(cmd) {
-        if !output.starts_with("Error executing command:") {
-            return true;
-        }
+    if let Some(result) = send_ipc_command(cmd) {
+        return result.code == 0;
     }
 
-    if let Ok(mut child) = std::process::Command::new("su").arg("-c").arg(cmd).spawn() {
-        if let Ok(status) = child.wait() {
-            return status.success();
-        }
+    if let Ok(status) = std::process::Command::new("su").arg("-c").arg(cmd).status() {
+        return status.success();
     }
     false
 }
 
 pub fn execute_cmd_and_get_output(cmd: &str) -> String {
-    if let Some(output) = send_ipc_command(cmd) {
-        if !output.starts_with("Error executing command:") {
-            return output.trim().to_string();
-        }
+    if let Some(result) = send_ipc_command(cmd) {
+        return if result.code == 0 {
+            result.output.trim().to_string()
+        } else {
+            String::new()
+        };
     }
 
     if let Ok(output) = std::process::Command::new("su").arg("-c").arg(cmd).output() {
@@ -64,6 +122,24 @@ pub fn execute_cmd_and_get_output(cmd: &str) -> String {
         }
     }
     String::new()
+}
+
+pub fn execute_cmd_detailed(cmd: &str) -> String {
+    let result = match send_ipc_command(cmd) {
+        Some(result) => result,
+        None => match std::process::Command::new("su").arg("-c").arg(cmd).output() {
+            Ok(output) => CmdResult {
+                code: output.status.code().unwrap_or(-1),
+                output: String::from_utf8_lossy(&output.stdout).into_owned(),
+            },
+            Err(e) => CmdResult {
+                code: -127,
+                output: format!("Error executing command: {}", e),
+            },
+        },
+    };
+
+    serde_json::json!({ "code": result.code, "output": result.output }).to_string()
 }
 
 const SCRIPT_SEPARATOR: &str = "__XA0Z0RA_SEP__";
@@ -164,6 +240,23 @@ pub extern "system" fn Java_com_xaozora_manager_core_shell_RootShellHelper_execu
     env.with_env(|env| -> jni::errors::Result<jstring> {
         let cmd = cmd.try_to_string(env).unwrap();
         let res = execute_cmd_and_get_output(&cmd);
+        let output = env.new_string(res).unwrap();
+        Ok(output.into_raw())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_xaozora_manager_core_shell_RootShellHelper_executeCmdDetailed<
+    'local,
+>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass,
+    cmd: JString,
+) -> jstring {
+    env.with_env(|env| -> jni::errors::Result<jstring> {
+        let cmd = cmd.try_to_string(env).unwrap();
+        let res = execute_cmd_detailed(&cmd);
         let output = env.new_string(res).unwrap();
         Ok(output.into_raw())
     })
