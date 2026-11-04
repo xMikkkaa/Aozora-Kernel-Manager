@@ -5,6 +5,66 @@ use serde::Serialize;
 
 use crate::utils::shell::{check_file_exists, execute_cmd, read_system_file};
 
+const KNOWN_PROFILES: [&str; 5] = ["powersave", "balance", "gaming", "gaming2", "performance"];
+
+fn normalized_files_dir(files_dir: &str) -> &str {
+    files_dir.trim_end_matches('/')
+}
+
+fn rupture_info_profiles(files_dir: &str) -> Vec<String> {
+    let path = format!("{}/autd/rupture_info.json", normalized_files_dir(files_dir));
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return Vec::new();
+    };
+
+    json["profiles"]
+        .as_array()
+        .map(|profiles| {
+            profiles
+                .iter()
+                .filter_map(|profile| profile.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+pub fn get_active_profile_for_files_dir(files_dir: &str) -> String {
+    let path = format!("{}/autd/autd_base_mode", normalized_files_dir(files_dir));
+    let content = read_system_file(&path);
+    if !content.is_empty() {
+        content
+    } else {
+        "balance".to_string()
+    }
+}
+
+pub fn get_available_profiles_for_files_dir(files_dir: &str) -> Vec<String> {
+    let base_dir = normalized_files_dir(files_dir);
+    let info_profiles = rupture_info_profiles(base_dir);
+
+    KNOWN_PROFILES
+        .iter()
+        .filter_map(|profile| {
+            let helper_path = format!("/system/bin/{profile}");
+            let bundled_path = format!("{base_dir}/xaozora_rupture/{profile}");
+            let helper_exists = check_file_exists(&helper_path);
+            let bundled_exists = check_file_exists(&bundled_path);
+            let info_lists_profile = info_profiles
+                .iter()
+                .any(|info_profile| info_profile == profile);
+
+            if helper_exists || bundled_exists || info_lists_profile {
+                Some((*profile).to_string())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
 pub fn get_active_profile() -> String {
     let status_path = "/data/data/com.xaozora.manager/files/autd/autd_status";
     let content = read_system_file(status_path);
@@ -143,6 +203,41 @@ pub extern "system" fn Java_com_xaozora_manager_services_ProfileTileService_getA
 ) -> jstring {
     env.with_env(|env| -> jni::errors::Result<jstring> {
         let profiles = get_available_profiles();
+        let json_str = serde_json::to_string(&profiles).unwrap_or_else(|_| "[]".to_string());
+        let output = env.new_string(json_str).unwrap();
+        Ok(output.into_raw())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_xaozora_manager_services_ProfileTileService_getActiveProfileForFilesDir<
+    'local,
+>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass,
+    files_dir: JString,
+) -> jstring {
+    env.with_env(|env| -> jni::errors::Result<jstring> {
+        let files_dir = files_dir.try_to_string(env).unwrap();
+        let profile = get_active_profile_for_files_dir(&files_dir);
+        let output = env.new_string(profile).unwrap();
+        Ok(output.into_raw())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_xaozora_manager_services_ProfileTileService_getAvailableProfilesJsonForFilesDir<
+    'local,
+>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass,
+    files_dir: JString,
+) -> jstring {
+    env.with_env(|env| -> jni::errors::Result<jstring> {
+        let files_dir = files_dir.try_to_string(env).unwrap();
+        let profiles = get_available_profiles_for_files_dir(&files_dir);
         let json_str = serde_json::to_string(&profiles).unwrap_or_else(|_| "[]".to_string());
         let output = env.new_string(json_str).unwrap();
         Ok(output.into_raw())
