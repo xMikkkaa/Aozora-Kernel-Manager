@@ -9,6 +9,7 @@ use std::thread;
 use crate::config;
 
 const SOCKET_PATH: &str = "/data/data/com.xaozora.manager/files/aozora_ipc.sock";
+const PROTOCOL_V2_HANDSHAKE: &str = "XA0Z0RA_V2";
 
 #[repr(C)]
 struct Ucred {
@@ -103,6 +104,7 @@ fn handle_client(mut stream: UnixStream, app_uid: Option<u32>) {
     }
 
     let mut buffer = [0; 4096];
+    let mut protocol_v2 = false;
     loop {
         match stream.read(&mut buffer) {
             Ok(0) => break,
@@ -111,11 +113,26 @@ fn handle_client(mut stream: UnixStream, app_uid: Option<u32>) {
                 let commands: Vec<&str> = req_str.split('\0').filter(|s| !s.is_empty()).collect();
 
                 for cmd in commands {
-                    let output = execute_shell_command(cmd);
-                    let mut response = output.into_bytes();
-                    response.extend_from_slice(b"\0EOF\0");
-                    if stream.write_all(&response).is_err() {
-                        break;
+                    if cmd == PROTOCOL_V2_HANDSHAKE {
+                        protocol_v2 = true;
+                        continue;
+                    }
+
+                    let (code, body) = execute_shell_command(cmd);
+
+                    if protocol_v2 {
+                        let header = format!("code={};len={}\n", code, body.len());
+                        if stream.write_all(header.as_bytes()).is_err()
+                            || stream.write_all(&body).is_err()
+                        {
+                            break;
+                        }
+                    } else {
+                        let mut response = body;
+                        response.extend_from_slice(b"\0EOF\0");
+                        if stream.write_all(&response).is_err() {
+                            break;
+                        }
                     }
                 }
             }
@@ -124,17 +141,14 @@ fn handle_client(mut stream: UnixStream, app_uid: Option<u32>) {
     }
 }
 
-fn execute_shell_command(cmd: &str) -> String {
-    let out = Command::new("sh").arg("-c").arg(cmd).output();
-
-    match out {
+fn execute_shell_command(cmd: &str) -> (i32, Vec<u8>) {
+    match Command::new("sh").arg("-c").arg(cmd).output() {
         Ok(output) => {
-            let mut res = String::from_utf8_lossy(&output.stdout).to_string();
-            if !output.stderr.is_empty() {
-                res.push_str(&String::from_utf8_lossy(&output.stderr));
-            }
-            res
+            let code = output.status.code().unwrap_or(-1);
+            let mut body = output.stdout;
+            body.extend_from_slice(&output.stderr);
+            (code, body)
         }
-        Err(e) => format!("Error executing command: {}", e),
+        Err(e) => (-127, format!("Error executing command: {}", e).into_bytes()),
     }
 }
