@@ -15,13 +15,20 @@ class ToastReceiver : BroadcastReceiver() {
                 .orEmpty()
                 .lineSequence()
                 .filter { it.isNotBlank() }
+                .map { it.replace('\n', ' ').replace('\r', ' ').take(200) }
                 .toList()
                 .takeLast(3)
             if (!file.delete()) {
                 RootShellHelper.executeCmd("rm -f ${file.absolutePath}")
             }
+            val fallback = intent.getStringExtra("message")
+                ?.replace('\n', ' ')
+                ?.replace('\r', ' ')
+                ?.trim()
+                ?.take(200)
+                ?.takeIf { it.isNotEmpty() }
             val messages = queued.ifEmpty {
-                listOf(intent.getStringExtra("message") ?: "Aozora Notification")
+                listOf(fallback ?: "Aozora Notification")
             }
             messages.forEach { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
         }
