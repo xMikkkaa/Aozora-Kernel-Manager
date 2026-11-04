@@ -611,9 +611,7 @@ pub fn set_hwui_target(percent: u64) {
         "setprop debug.hwui.target_cpu_time_percent {}",
         percent
     ));
-    shell(&format!("iorenice -p {} 7 idle", std::process::id()));
     shell(&format!("renice -n 19 -p {}", std::process::id()));
-    shell(&format!("taskset -ap 1 {}", std::process::id()));
 }
 
 pub fn set_settings(key: &str, value: &str) {
