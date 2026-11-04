@@ -444,17 +444,21 @@ fun TuningScreen(
                             } else if (profile.id == "cachecleaner") {
                                 scope.launch(Dispatchers.IO) {
                                     processingProfile = profile.id
-                                    try {
+                                    val cleaned = try {
                                         delay(600)
                                         if (isBuiltInTuning) {
                                             RootShellHelper.executeCmd("${context.filesDir.path}/xaozora_rupture/cachecleaner")
                                         } else {
                                             RootShellHelper.executeCmd("/system/bin/cachecleaner")
                                         }
-                                    } catch (e: Exception) {} finally {
+                                    } catch (e: Exception) {
+                                        false
+                                    } finally {
                                         processingProfile = null
                                     }
-                                    scope.launch { snackbarHostState.showSnackbar("Cache cleaned successfully!") }
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(if (cleaned) "Cache cleaned successfully!" else "Failed to run cache cleaner")
+                                    }
                                 }
                             } else if (isAutdAvailable) {
                                 scope.launch(Dispatchers.IO) {
@@ -471,28 +475,40 @@ fun TuningScreen(
                             } else if (isBuiltInTuning) {
                                 scope.launch(Dispatchers.IO) {
                                     processingProfile = profile.id
-                                    try {
+                                    val applied = try {
                                         delay(600)
                                         RootShellHelper.executeCmd("${context.filesDir.path}/xaozora_rupture/${profile.id}")
-                                        activeProfileId = profile.id
-                                        prefs.edit().putString("manual_active_profile", profile.id).apply()
-                                    } catch (e: Exception) {} finally {
+                                    } catch (e: Exception) {
+                                        false
+                                    } finally {
                                         processingProfile = null
                                     }
-                                    scope.launch { snackbarHostState.showSnackbar("Profile ${profile.name} applied") }
+                                    if (applied) {
+                                        activeProfileId = profile.id
+                                        prefs.edit().putString("manual_active_profile", profile.id).apply()
+                                        scope.launch { snackbarHostState.showSnackbar("Profile ${profile.name} applied") }
+                                    } else {
+                                        scope.launch { snackbarHostState.showSnackbar("Failed to apply profile ${profile.name}") }
+                                    }
                                 }
                             } else {
                                 scope.launch(Dispatchers.IO) {
                                     processingProfile = profile.id
-                                    try {
+                                    val applied = try {
                                         delay(600)
                                         RootShellHelper.executeCmd("/system/bin/${profile.id}")
-                                        activeProfileId = profile.id
-                                        prefs.edit().putString("manual_active_profile", profile.id).apply()
-                                    } catch (e: Exception) {} finally {
+                                    } catch (e: Exception) {
+                                        false
+                                    } finally {
                                         processingProfile = null
                                     }
-                                    scope.launch { snackbarHostState.showSnackbar("Profile ${profile.name} applied") }
+                                    if (applied) {
+                                        activeProfileId = profile.id
+                                        prefs.edit().putString("manual_active_profile", profile.id).apply()
+                                        scope.launch { snackbarHostState.showSnackbar("Profile ${profile.name} applied") }
+                                    } else {
+                                        scope.launch { snackbarHostState.showSnackbar("Failed to apply profile ${profile.name}") }
+                                    }
                                 }
                             }
                         }
