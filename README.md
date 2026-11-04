@@ -19,7 +19,7 @@
 
 ---
 
-Aozora Kernel Manager is a native Android application built with **Kotlin** and **Jetpack Compose (Material 3)** for managing kernel parameters, performance profiles, and system tuning. It features a high-performance **Rust-based native daemon (AUTD)** that provides automated per-app performance profiling, real-time hardware monitoring, kernel-level thread optimization, and low-latency root command execution through Unix Domain Socket IPC — all presented through a glassmorphic Material 3 UI with Monet dynamic theming. Performance profiles run from an installed kernel-helper module when present, or from the app's bundled **Aozora-Rupture** standalone tuning engine; GPU and CPU detection is universal across SoC families.
+Aozora Kernel Manager is a native Android application built with **Kotlin** and **Jetpack Compose (Material 3)** for managing kernel parameters, performance profiles, and system tuning. It features a high-performance **Rust-based native daemon (AUTD)** that provides automated per-app performance profiling, real-time hardware monitoring, kernel-level thread optimization, and low-latency root command execution through Unix Domain Socket IPC — all presented through a glassmorphic Material 3 UI with Monet dynamic theming. Performance profiles run from an installed kernel-helper module when present, or from the app's bundled **Aozora-Rupture** standalone tuning engine; GPU and CPU detection covers the known Adreno/KGSL, Mali, Tegra devfreq, and generic devfreq backends plus runtime cpufreq policy clusters.
 
 ## Features
 
@@ -31,7 +31,7 @@ Aozora Kernel Manager is a native Android application built with **Kotlin** and 
 
 ### ⚡ Hardware Tuning
 - **CPU Cluster Control**: Min/max frequency and governor per cpufreq policy (`policyN`), auto-enumerated at runtime with LITTLE/MID/BIG labels
-- **GPU Control**: Min/max frequency via universal backend detection (7 sysfs paths); governor written only when the backend exposes it; Adreno Boost on KGSL devices
+- **GPU Control**: Min/max frequency through known Adreno/KGSL, Mali, Tegra, and generic devfreq backends (7 sysfs paths); governor written only when the backend exposes it; Adreno Boost on KGSL devices
 - **Profile Scripts**: Built-in shell script viewer/editor for kernel-helper modules (Developer Mode); without a helper module, profiles run from the bundled standalone engine instead
 
 ### 🎮 Performance Profiles
@@ -44,7 +44,7 @@ Aozora Kernel Manager is a native Android application built with **Kotlin** and 
 | Performance | Full power regardless of thermal headroom |
 | Cache Cleaner | Instant system cache eviction |
 
-> Profiles execute from the helper module (`/system/bin/`) when installed, otherwise from the bundled Aozora-Rupture binaries in app storage.
+> Profiles execute from the helper module (`/system/bin/`) when installed, otherwise from the bundled Aozora-Rupture binaries in app storage. On Tegra, profile tuning is currently a no-op; hardware monitoring and GPU frequency control still use the Tegra sysfs paths where available.
 
 ### 🤖 Automated Per-App Tuning
 - Assign performance, gaming, or gaming 2 profiles to individual apps
@@ -134,10 +134,10 @@ graph TD
 
 **Key architectural decisions:**
 - **No ViewModels** — UI state is managed directly with Compose `remember` / `mutableStateOf` and `LaunchedEffect`
-- **IPC-first root execution** — Commands are routed through a Unix Domain Socket to the persistent daemon, avoiding per-command `su` process spawning overhead
+- **IPC-first root execution** — Commands are routed through a Unix Domain Socket to the persistent daemon, avoiding per-command `su` process spawning overhead; the socket is owned by the app uid with mode 0660 and the daemon accepts only uid 0 or the app uid via `SO_PEERCRED`, falling back to `su` when the socket is unavailable
 - **Triple Rust crates** — JNI library handles hardware queries and IPC client logic; standalone daemon handles background automation and game detection; the rupture crate provides the tuning engine as both a standalone executable suite and a library dependency
 - **Helper-first branching** — Tuning execution prefers Magisk-installed `/system/bin` modules if found, otherwise dynamically falling back to the bundled rupture engine
-- **Universal hardware detection** — GPU backends and CPU policies are enumerated dynamically at runtime to support diverse SoC vendors without hardcoding paths
+- **Known-backend detection** — GPU backends and CPU policies are enumerated at runtime from the vendor paths the app supports, rather than assuming one fixed sysfs layout
 
 ## Tech Stack
 
@@ -163,7 +163,7 @@ graph TD
 - *(Optional)* [**Aozora Kernel Helper**](https://t.me/KaiProject2/1077) module installed for legacy shell script profiling and developer mode script editing. Without it, the app seamlessly falls back to the bundled standalone tuning engine.
 
 > [!NOTE]
-> The App Manager and automated background services require the built-in **xaozora_daemon (AUTD)** to be running. Without it, the app operates in basic mode (manual profile switching only). The daemon is bundled with the APK and starts automatically.
+> The App Manager and automated background services require the built-in **xaozora_daemon (AUTD)** to be running. Without it, the app operates in basic mode (manual profile switching only). The daemon is bundled with the APK and starts automatically. Root is required for the daemon and its IPC socket; when the socket is unreachable, the app falls back to direct `su` commands.
 
 ## Installation
 
