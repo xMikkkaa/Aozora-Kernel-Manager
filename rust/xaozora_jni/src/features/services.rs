@@ -174,9 +174,9 @@ pub extern "system" fn Java_com_xaozora_manager_services_ProfileTileService_getA
     files_dir: JString,
 ) -> jstring {
     env.with_env(|env| -> jni::errors::Result<jstring> {
-        let files_dir = files_dir.try_to_string(env).unwrap();
+        let files_dir = files_dir.try_to_string(env)?;
         let profile = get_active_profile_for_files_dir(&files_dir);
-        let output = env.new_string(profile).unwrap();
+        let output = env.new_string(profile)?;
         Ok(output.into_raw())
     })
     .resolve::<ThrowRuntimeExAndDefault>()
@@ -191,10 +191,10 @@ pub extern "system" fn Java_com_xaozora_manager_services_ProfileTileService_getA
     files_dir: JString,
 ) -> jstring {
     env.with_env(|env| -> jni::errors::Result<jstring> {
-        let files_dir = files_dir.try_to_string(env).unwrap();
+        let files_dir = files_dir.try_to_string(env)?;
         let profiles = get_available_profiles_for_files_dir(&files_dir);
         let json_str = serde_json::to_string(&profiles).unwrap_or_else(|_| "[]".to_string());
-        let output = env.new_string(json_str).unwrap();
+        let output = env.new_string(json_str)?;
         Ok(output.into_raw())
     })
     .resolve::<ThrowRuntimeExAndDefault>()
@@ -207,7 +207,7 @@ pub extern "system" fn Java_com_xaozora_manager_services_ProfileTileService_appl
     profile_id: JString,
 ) -> jboolean {
     env.with_env(|env| -> jni::errors::Result<jboolean> {
-        let profile = profile_id.try_to_string(env).unwrap();
+        let profile = profile_id.try_to_string(env)?;
         Ok(apply_profile(&profile))
     })
     .resolve::<ThrowRuntimeExAndDefault>()
@@ -242,7 +242,7 @@ pub extern "system" fn Java_com_xaozora_manager_services_MonitorService_getBatte
     env.with_env(|env| -> jni::errors::Result<jstring> {
         let data = get_battery_notification_data();
         let json_str = serde_json::to_string(&data).unwrap_or_else(|_| "{}".to_string());
-        let output = env.new_string(json_str).unwrap();
+        let output = env.new_string(json_str)?;
         Ok(output.into_raw())
     })
     .resolve::<ThrowRuntimeExAndDefault>()

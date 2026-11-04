@@ -115,13 +115,13 @@ pub extern "system" fn Java_com_xaozora_manager_core_network_UpdateManager_check
     current_app_version: JString,
 ) -> jstring {
     env.with_env(|env| -> jni::errors::Result<jstring> {
-        let version = current_app_version.try_to_string(env).unwrap();
+        let version = current_app_version.try_to_string(env)?;
         let update = check_app_update(&version);
 
         let result = UpdateCheckResult { app_update: update };
         let json_str = serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_string());
 
-        let output = env.new_string(json_str).unwrap();
+        let output = env.new_string(json_str)?;
         Ok(output.into_raw())
     })
     .resolve::<ThrowRuntimeExAndDefault>()

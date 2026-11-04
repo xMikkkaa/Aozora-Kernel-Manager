@@ -309,7 +309,7 @@ pub extern "system" fn Java_com_xaozora_manager_core_utils_GpuControlUtils_getGp
     env.with_env(|env| -> jni::errors::Result<jstring> {
         let config = get_gpu_config();
         let json_str = serde_json::to_string(&config).unwrap_or_else(|_| "{}".to_string());
-        let output = env.new_string(json_str).unwrap();
+        let output = env.new_string(json_str)?;
         Ok(output.into_raw())
     })
     .resolve::<ThrowRuntimeExAndDefault>()
@@ -327,14 +327,14 @@ pub extern "system" fn Java_com_xaozora_manager_core_utils_GpuControlUtils_apply
     adreno_boost: JString,
 ) {
     env.with_env(|env| -> jni::errors::Result<()> {
-        let min_freq = min_freq.try_to_string(env).unwrap();
-        let max_freq = max_freq.try_to_string(env).unwrap();
-        let governor = governor.try_to_string(env).unwrap();
+        let min_freq = min_freq.try_to_string(env)?;
+        let max_freq = max_freq.try_to_string(env)?;
+        let governor = governor.try_to_string(env)?;
 
         let adreno_boost_val: Option<String> = if adreno_boost.is_null() {
             None
         } else {
-            Some(adreno_boost.try_to_string(env).unwrap())
+            Some(adreno_boost.try_to_string(env)?)
         };
 
         let adreno_boost_ref = adreno_boost_val.as_deref();

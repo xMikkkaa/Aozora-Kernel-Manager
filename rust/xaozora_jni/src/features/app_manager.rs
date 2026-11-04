@@ -66,11 +66,11 @@ pub extern "system" fn Java_com_xaozora_manager_core_utils_AppManagerUtils_getCo
     app_list_path: JString,
 ) -> jstring {
     env.with_env(|env| -> jni::errors::Result<jstring> {
-        let path = app_list_path.try_to_string(env).unwrap();
+        let path = app_list_path.try_to_string(env)?;
         let apps = get_configured_apps(&path);
 
         let json_str = serde_json::to_string(&apps).unwrap_or_else(|_| "[]".to_string());
-        let output = env.new_string(json_str).unwrap();
+        let output = env.new_string(json_str)?;
         Ok(output.into_raw())
     })
     .resolve::<ThrowRuntimeExAndDefault>()

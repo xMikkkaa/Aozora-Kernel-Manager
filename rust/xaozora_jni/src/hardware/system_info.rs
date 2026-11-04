@@ -655,7 +655,7 @@ pub extern "system" fn Java_com_xaozora_manager_core_utils_SystemInfoUtils_fetch
     env.with_env(|env| -> jni::errors::Result<jstring> {
         let info = fetch_system_info();
         let json_str = serde_json::to_string(&info).unwrap_or_else(|_| "{}".to_string());
-        let output = env.new_string(json_str).unwrap();
+        let output = env.new_string(json_str)?;
         Ok(output.into_raw())
     })
     .resolve::<ThrowRuntimeExAndDefault>()
@@ -671,7 +671,7 @@ pub extern "system" fn Java_com_xaozora_manager_core_utils_SystemInfoUtils_pollH
     env.with_env(|env| -> jni::errors::Result<jstring> {
         let metrics = poll_hardware();
         let json_str = serde_json::to_string(&metrics).unwrap_or_else(|_| "{}".to_string());
-        let output = env.new_string(json_str).unwrap();
+        let output = env.new_string(json_str)?;
         Ok(output.into_raw())
     })
     .resolve::<ThrowRuntimeExAndDefault>()

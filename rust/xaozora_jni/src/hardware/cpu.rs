@@ -116,11 +116,11 @@ pub extern "system" fn Java_com_xaozora_manager_core_utils_CpuControlUtils_getCl
     name: JString,
 ) -> jstring {
     env.with_env(|env| -> jni::errors::Result<jstring> {
-        let name = name.try_to_string(env).unwrap();
+        let name = name.try_to_string(env)?;
         let config = get_cluster_config(cluster_cpu_id, &name);
 
         let json_str = serde_json::to_string(&config).unwrap_or_else(|_| "{}".to_string());
-        let output = env.new_string(json_str).unwrap();
+        let output = env.new_string(json_str)?;
         Ok(output.into_raw())
     })
     .resolve::<ThrowRuntimeExAndDefault>()
@@ -138,9 +138,9 @@ pub extern "system" fn Java_com_xaozora_manager_core_utils_CpuControlUtils_apply
     governor: JString,
 ) {
     env.with_env(|env| -> jni::errors::Result<()> {
-        let min_freq = min_freq.try_to_string(env).unwrap();
-        let max_freq = max_freq.try_to_string(env).unwrap();
-        let governor = governor.try_to_string(env).unwrap();
+        let min_freq = min_freq.try_to_string(env)?;
+        let max_freq = max_freq.try_to_string(env)?;
+        let governor = governor.try_to_string(env)?;
 
         apply_cluster_config(cluster_cpu_id, &min_freq, &max_freq, &governor);
         Ok(())
@@ -158,7 +158,7 @@ pub extern "system" fn Java_com_xaozora_manager_core_utils_CpuControlUtils_getCp
     env.with_env(|env| -> jni::errors::Result<jstring> {
         let policies = list_cpu_policies();
         let json_str = serde_json::to_string(&policies).unwrap_or_else(|_| "[]".to_string());
-        let output = env.new_string(json_str).unwrap();
+        let output = env.new_string(json_str)?;
         Ok(output.into_raw())
     })
     .resolve::<ThrowRuntimeExAndDefault>()

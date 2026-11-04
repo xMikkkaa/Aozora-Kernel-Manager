@@ -256,7 +256,7 @@ pub extern "system" fn Java_com_xaozora_manager_core_shell_RootShellHelper_execu
     cmd: JString,
 ) -> jboolean {
     env.with_env(|env| -> jni::errors::Result<jboolean> {
-        let cmd = cmd.try_to_string(env).unwrap();
+        let cmd = cmd.try_to_string(env)?;
         Ok(execute_cmd(&cmd))
     })
     .resolve::<ThrowRuntimeExAndDefault>()
@@ -271,9 +271,9 @@ pub extern "system" fn Java_com_xaozora_manager_core_shell_RootShellHelper_execu
     cmd: JString,
 ) -> jstring {
     env.with_env(|env| -> jni::errors::Result<jstring> {
-        let cmd = cmd.try_to_string(env).unwrap();
+        let cmd = cmd.try_to_string(env)?;
         let res = execute_cmd_and_get_output(&cmd);
-        let output = env.new_string(res).unwrap();
+        let output = env.new_string(res)?;
         Ok(output.into_raw())
     })
     .resolve::<ThrowRuntimeExAndDefault>()
@@ -288,9 +288,9 @@ pub extern "system" fn Java_com_xaozora_manager_core_shell_RootShellHelper_execu
     cmd: JString,
 ) -> jstring {
     env.with_env(|env| -> jni::errors::Result<jstring> {
-        let cmd = cmd.try_to_string(env).unwrap();
+        let cmd = cmd.try_to_string(env)?;
         let res = execute_cmd_detailed(&cmd);
-        let output = env.new_string(res).unwrap();
+        let output = env.new_string(res)?;
         Ok(output.into_raw())
     })
     .resolve::<ThrowRuntimeExAndDefault>()
@@ -305,9 +305,9 @@ pub extern "system" fn Java_com_xaozora_manager_core_shell_RootShellHelper_readS
     path: JString,
 ) -> jstring {
     env.with_env(|env| -> jni::errors::Result<jstring> {
-        let path = path.try_to_string(env).unwrap();
+        let path = path.try_to_string(env)?;
         let res = read_system_file(&path);
-        let output = env.new_string(res).unwrap();
+        let output = env.new_string(res)?;
         Ok(output.into_raw())
     })
     .resolve::<ThrowRuntimeExAndDefault>()
@@ -323,8 +323,8 @@ pub extern "system" fn Java_com_xaozora_manager_core_shell_RootShellHelper_write
     value: JString,
 ) -> jboolean {
     env.with_env(|env| -> jni::errors::Result<jboolean> {
-        let path = path.try_to_string(env).unwrap();
-        let value = value.try_to_string(env).unwrap();
+        let path = path.try_to_string(env)?;
+        let value = value.try_to_string(env)?;
         Ok(write_system_file(&path, &value))
     })
     .resolve::<ThrowRuntimeExAndDefault>()
@@ -339,7 +339,7 @@ pub extern "system" fn Java_com_xaozora_manager_core_shell_RootShellHelper_check
     path: JString,
 ) -> jboolean {
     env.with_env(|env| -> jni::errors::Result<jboolean> {
-        let path = path.try_to_string(env).unwrap();
+        let path = path.try_to_string(env)?;
         Ok(check_file_exists(&path))
     })
     .resolve::<ThrowRuntimeExAndDefault>()
