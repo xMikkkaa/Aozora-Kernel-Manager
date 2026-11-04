@@ -284,6 +284,26 @@ class MonitorService : Service() {
         }
     }
 
+    private fun triggerBatteryStatsReset(prefs: android.content.SharedPreferences, reason: String) {
+        serviceScope.launch(Dispatchers.IO) {
+            try {
+                RootShellHelper.executeCmd("dumpsys batterystats --reset")
+
+                val battmonDir = java.io.File(filesDir, "battmon")
+                val batteryLogPath = java.io.File(battmonDir, "battery_logger.jsonl").absolutePath
+
+                val autdArg = if (prefs.getBoolean("autd_enabled", true)) "--enable-autd" else "--disable-autd"
+                val battmonArg = if (prefs.getBoolean("battery_monitor_service", true)) "--battery-logger $batteryLogPath" else ""
+                com.xaozora.manager.core.utils.NativeDaemonManager.killDaemon()
+                RootShellHelper.executeCmd("cd ${filesDir.absolutePath} && nohup ./xaozora_daemon $autdArg --reset-stats $battmonArg > /dev/null 2>&1 &")
+
+                Log.d(TAG, "Battery stats reset via daemon on $reason")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to reset stats on $reason", e)
+            }
+        }
+    }
+
     private fun updateBatteryNotification(nm: NotificationManager, prefs: android.content.SharedPreferences) {
         try {
             val showPercentIcon = prefs.getBoolean("battery_show_notif_icon", false)
@@ -311,28 +331,21 @@ class MonitorService : Service() {
             val isPlugged = plugged > 0
             val isFullyCharged = isPlugged && (batteryPct == 100 || status == BatteryManager.BATTERY_STATUS_FULL)
 
-            if (isPlugged && !wasCharging) {
-                if (prefs.getBoolean("battery_reset_plugged_in", false)) {
-                    serviceScope.launch(Dispatchers.IO) {
-                        try {
-                            RootShellHelper.executeCmd("dumpsys batterystats --reset")
-                            
-                            val battmonDir = java.io.File(filesDir, "battmon")
-                            val batteryLogPath = java.io.File(battmonDir, "battery_logger.jsonl").absolutePath
-                            
-                            val autdArg = if (prefs.getBoolean("autd_enabled", true)) "--enable-autd" else "--disable-autd"
-                            val battmonArg = if (prefs.getBoolean("battery_monitor_service", true)) "--battery-logger $batteryLogPath" else ""
-                            com.xaozora.manager.core.utils.NativeDaemonManager.killDaemon()
-                            RootShellHelper.executeCmd("cd ${filesDir.absolutePath} && nohup ./xaozora_daemon $autdArg --reset-stats $battmonArg > /dev/null 2>&1 &")
-                            
-                            Log.d(TAG, "Battery stats reset via daemon on plug-in")
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to reset stats on plug", e)
-                        }
-                    }
-                }
+            if (isPlugged && !wasCharging && prefs.getBoolean("battery_reset_plugged_in", false)) {
+                triggerBatteryStatsReset(prefs, "plugged in")
             }
             wasCharging = isPlugged
+
+            if (prefs.getBoolean("battery_reset_on_percentage", false) && batteryPct >= 0) {
+                val resetThreshold = prefs.getFloat("battery_reset_percentage", 90f)
+                val resetArmed = prefs.getBoolean("battery_percentage_reset_armed", true)
+                if (resetArmed && batteryPct >= resetThreshold) {
+                    prefs.edit().putBoolean("battery_percentage_reset_armed", false).apply()
+                    triggerBatteryStatsReset(prefs, "charge at $batteryPct% (threshold ${resetThreshold.toInt()}%)")
+                } else if (!resetArmed && batteryPct < resetThreshold - 1f) {
+                    prefs.edit().putBoolean("battery_percentage_reset_armed", true).apply()
+                }
+            }
 
             val bm = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
             val currentNowMicroAmps = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
