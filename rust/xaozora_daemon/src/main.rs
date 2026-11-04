@@ -33,6 +33,49 @@ extern "C" fn signal_handler(_sig: libc::c_int) {
     RUNNING.store(false, Ordering::SeqCst);
 }
 
+fn process_matches_daemon(pid: i32) -> bool {
+    let Ok(cmdline) = fs::read(format!("/proc/{}/cmdline", pid)) else {
+        return false;
+    };
+
+    cmdline
+        .split(|byte| *byte == 0)
+        .any(|arg| arg.ends_with(b"xaozora_daemon"))
+}
+
+fn terminate_stale_daemon(pid: i32) {
+    if pid <= 0 || pid == std::process::id() as i32 {
+        return;
+    }
+
+    unsafe {
+        if libc::kill(pid, 0) != 0 {
+            return;
+        }
+    }
+
+    if !process_matches_daemon(pid) {
+        return;
+    }
+
+    unsafe {
+        libc::kill(pid, 15);
+    }
+
+    for _ in 0..20 {
+        sleep(Duration::from_millis(100));
+        unsafe {
+            if libc::kill(pid, 0) != 0 {
+                return;
+            }
+        }
+    }
+
+    unsafe {
+        libc::kill(pid, 9);
+    }
+}
+
 fn main() {
     config::setup_android_env();
 
@@ -76,12 +119,7 @@ fn main() {
     if let Ok(existing_pid_str) = fs::read_to_string(&pid_path)
         && let Ok(pid) = existing_pid_str.trim().parse::<i32>()
     {
-        unsafe {
-            if pid != std::process::id() as i32 && libc::kill(pid, 0) == 0 {
-                libc::kill(pid, 15);
-                sleep(Duration::from_millis(500));
-            }
-        }
+        terminate_stale_daemon(pid);
     }
     let _ = config::write_pid_file(&pid_path, std::process::id());
 
