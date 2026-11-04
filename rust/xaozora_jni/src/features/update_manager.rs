@@ -11,6 +11,7 @@ pub struct AppUpdateResult {
     pub new_version: String,
     pub download_url: String,
     pub release_notes: String,
+    pub digest: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -35,7 +36,12 @@ pub fn check_app_update(current_app_version: &str) -> AppUpdateResult {
         Err(_) => return AppUpdateResult::default(),
     };
 
-    let tag_name = json["tag_name"].as_str().unwrap_or("").replace("v", "");
+    let tag_name = json["tag_name"]
+        .as_str()
+        .unwrap_or("")
+        .trim()
+        .trim_start_matches(['v', 'V'])
+        .to_string();
     let release_notes = json["body"]
         .as_str()
         .unwrap_or("No release notes provided.")
@@ -43,12 +49,14 @@ pub fn check_app_update(current_app_version: &str) -> AppUpdateResult {
 
     if is_version_greater(&tag_name, current_app_version) {
         let mut download_url = String::new();
+        let mut digest = String::new();
         if let Some(assets) = json["assets"].as_array() {
             for asset in assets {
                 if let Some(name) = asset["name"].as_str() {
                     if name.ends_with(".apk") {
                         if let Some(url) = asset["browser_download_url"].as_str() {
                             download_url = url.to_string();
+                            digest = asset["digest"].as_str().unwrap_or("").to_string();
                             break;
                         }
                     }
@@ -62,6 +70,7 @@ pub fn check_app_update(current_app_version: &str) -> AppUpdateResult {
                 new_version: tag_name,
                 download_url,
                 release_notes,
+                digest,
             };
         }
     }
@@ -69,14 +78,26 @@ pub fn check_app_update(current_app_version: &str) -> AppUpdateResult {
     AppUpdateResult::default()
 }
 
+fn parse_version(version: &str) -> Vec<u32> {
+    version
+        .trim()
+        .trim_start_matches(['v', 'V'])
+        .split('.')
+        .map(|segment| {
+            let digits: String = segment.chars().take_while(|c| c.is_ascii_digit()).collect();
+            digits.parse::<u32>().unwrap_or(0)
+        })
+        .collect()
+}
+
 fn is_version_greater(new_ver: &str, old_ver: &str) -> bool {
-    let v1: Vec<i32> = new_ver.split('.').map(|s| s.parse().unwrap_or(0)).collect();
-    let v2: Vec<i32> = old_ver.split('.').map(|s| s.parse().unwrap_or(0)).collect();
+    let v1 = parse_version(new_ver);
+    let v2 = parse_version(old_ver);
 
     let max_len = std::cmp::max(v1.len(), v2.len());
     for i in 0..max_len {
-        let n1 = v1.get(i).unwrap_or(&0);
-        let n2 = v2.get(i).unwrap_or(&0);
+        let n1 = v1.get(i).copied().unwrap_or(0);
+        let n2 = v2.get(i).copied().unwrap_or(0);
         if n1 > n2 {
             return true;
         }
