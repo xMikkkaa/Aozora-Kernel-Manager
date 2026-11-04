@@ -235,23 +235,6 @@ class MonitorService : Service() {
             .setSmallIcon(android.R.drawable.ic_popup_sync).build()
     }
 
-    private fun showNoDaemonNotification() {
-        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val intent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        }
-        val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
-        
-        val builder = Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("Aozora Kernel Manager")
-            .setContentText("Native daemon not installed. Battery monitoring may not work.")
-            .setSmallIcon(android.R.drawable.ic_dialog_alert)
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
-        
-        nm.notify(889, builder.build())
-    }
-
     private fun startBatteryMonitorLoop() {
         serviceScope.launch {
             val prefs = getSharedPreferences("aozora_prefs", Context.MODE_PRIVATE)
