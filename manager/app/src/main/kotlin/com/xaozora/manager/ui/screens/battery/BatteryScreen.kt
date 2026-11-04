@@ -473,12 +473,17 @@ fun BatteryOptionTab(hazeState: HazeState, resetPercentage: Float, onShowPercent
         Button(
             onClick = {
                 coroutineScope.launch(Dispatchers.IO) {
-                    val path = "${context.filesDir.path}/battmon/battery_stats.json"
-                    val baselinePath = "${context.filesDir.path}/battmon/battery_stats_baseline.json"
-                    RootShellHelper.executeCmd("cp $path $baselinePath")
+                    val autdArg = if (prefs.getBoolean("autd_enabled", true)) "--enable-autd" else "--disable-autd"
+                    val battmonArg = if (prefs.getBoolean("battery_monitor_service", true)) {
+                        "--battery-logger ${context.filesDir.path}/battmon/battery_logger.jsonl"
+                    } else ""
+                    RootShellHelper.executeCmd("dumpsys batterystats --reset")
+                    com.xaozora.manager.core.utils.NativeDaemonManager.killDaemon()
+                    RootShellHelper.executeCmd("cd ${context.filesDir.absolutePath} && nohup ./xaozora_daemon $autdArg --reset-stats $battmonArg > /dev/null 2>&1 &")
                     savePref("battery_last_reset", System.currentTimeMillis())
-                    val statsFile = java.io.File(path)
-                    if (statsFile.exists()) statsFile.writeText("{}")
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(context, "Battery stats reset", android.widget.Toast.LENGTH_SHORT).show()
+                    }
                 }
             },
             modifier = Modifier.fillMaxWidth().height(56.dp).border(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f), RoundedCornerShape(16.dp)),
