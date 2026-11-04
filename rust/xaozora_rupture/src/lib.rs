@@ -29,19 +29,21 @@ use soc::{detect_soc, soc_apply};
 pub const RUPTURE_NAME: &str = "Aozora-Rupture";
 pub const RUPTURE_VERSION: &str = "1.0.0";
 
-pub const RUPTURE_INFO_PATH: &str = "autd/rupture_info.json";
+pub const RUPTURE_INFO_PATH: &str = "/data/data/com.xaozora.manager/files/autd/rupture_info.json";
 
 pub use boot::optimize_boot_tune;
 
 pub fn write_info_json() {
-    let helper_installed = std::path::Path::new("/system/bin/powersave").exists();
     let profiles = vec!["powersave", "balance", "performance", "gaming", "gaming2"];
     let info = serde_json::json!({
         "name": RUPTURE_NAME,
         "version": RUPTURE_VERSION,
-        "helper_installed": helper_installed,
         "profiles": profiles,
     });
+
+    if let Some(parent) = std::path::Path::new(RUPTURE_INFO_PATH).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
     let _ = std::fs::write(RUPTURE_INFO_PATH, info.to_string());
 }
 
