@@ -363,7 +363,10 @@ class MainActivity : ComponentActivity() {
                                     snackbarHostState.showSnackbar("Downloading update in background...")
 
                                     if (isAppUpdate) {
-                                        UpdateManager.performAppUpdate(result.appUpdate.downloadUrl, context.cacheDir)
+                                        val updateStarted = UpdateManager.performAppUpdate(result.appUpdate.downloadUrl, context.cacheDir)
+                                        if (!updateStarted) {
+                                            snackbarHostState.showSnackbar("Failed to download update.")
+                                        }
                                     }
                                 }
                             }

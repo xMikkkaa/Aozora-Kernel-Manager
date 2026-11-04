@@ -221,7 +221,7 @@ fun AboutScreen(
 
         AboutToggleCard(
             title = "Auto Check for Updates",
-            subtitle = "Automatically check for app and daemon updates on startup.",
+            subtitle = "Automatically check for app updates on startup.",
             icon = Icons.Rounded.Update,
             checked = autoCheckUpdates,
             hazeState = hazeState,
@@ -306,7 +306,10 @@ fun AboutScreen(
                     snackbarHostState.showSnackbar("Downloading update in background...")
                     
                     if (isAppUpdate) {
-                        UpdateManager.performAppUpdate(result.appUpdate.downloadUrl, context.cacheDir)
+                        val updateStarted = UpdateManager.performAppUpdate(result.appUpdate.downloadUrl, context.cacheDir)
+                        if (!updateStarted) {
+                            snackbarHostState.showSnackbar("Failed to download update.")
+                        }
                     }
                 }
             }
