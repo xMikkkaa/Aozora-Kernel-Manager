@@ -1,10 +1,68 @@
 use std::fs;
 use std::io::{Read, Write};
+use std::os::unix::fs::PermissionsExt;
+use std::os::unix::io::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::Command;
 use std::thread;
 
+use crate::config;
+
 const SOCKET_PATH: &str = "/data/data/com.xaozora.manager/files/aozora_ipc.sock";
+
+#[repr(C)]
+struct Ucred {
+    pid: i32,
+    uid: u32,
+    gid: u32,
+}
+
+fn peer_cred_uid(stream: &UnixStream) -> Option<u32> {
+    let mut cred = Ucred {
+        pid: 0,
+        uid: 0,
+        gid: 0,
+    };
+    let mut len = std::mem::size_of::<Ucred>() as libc::socklen_t;
+    let result = unsafe {
+        libc::getsockopt(
+            stream.as_raw_fd(),
+            libc::SOL_SOCKET,
+            libc::SO_PEERCRED,
+            &mut cred as *mut Ucred as *mut libc::c_void,
+            &mut len,
+        )
+    };
+
+    if result == 0 && len as usize >= std::mem::size_of::<Ucred>() {
+        Some(cred.uid)
+    } else {
+        None
+    }
+}
+
+fn is_authorized(peer_uid: u32, app_uid: Option<u32>) -> bool {
+    peer_uid == 0 || app_uid == Some(peer_uid)
+}
+
+fn apply_socket_permissions() {
+    let chowned = config::app_owner_ids()
+        .and_then(|(uid, gid)| {
+            std::ffi::CString::new(SOCKET_PATH)
+                .ok()
+                .map(|c_path| unsafe { libc::chown(c_path.as_ptr(), uid, gid) } == 0)
+        })
+        .unwrap_or(false);
+
+    let mode = if chowned {
+        0o660
+    } else {
+        println!("IPC: socket owner unavailable; using 0666 with peer credential checks");
+        0o666
+    };
+
+    let _ = fs::set_permissions(SOCKET_PATH, fs::Permissions::from_mode(mode));
+}
 
 pub fn start_ipc_server() {
     let _ = fs::remove_file(SOCKET_PATH);
@@ -17,12 +75,13 @@ pub fn start_ipc_server() {
         }
     };
 
-    let _ = Command::new("chmod").arg("666").arg(SOCKET_PATH).status();
+    apply_socket_permissions();
+    let app_uid = config::app_owner_ids().map(|(uid, _)| uid);
 
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
-                thread::spawn(move || handle_client(stream));
+                thread::spawn(move || handle_client(stream, app_uid));
             }
             Err(e) => {
                 println!("IPC socket error: {}", e);
@@ -32,7 +91,17 @@ pub fn start_ipc_server() {
     }
 }
 
-fn handle_client(mut stream: UnixStream) {
+fn handle_client(mut stream: UnixStream, app_uid: Option<u32>) {
+    let Some(peer_uid) = peer_cred_uid(&stream) else {
+        println!("IPC: rejected connection without peer credentials");
+        return;
+    };
+
+    if !is_authorized(peer_uid, app_uid) {
+        println!("IPC: rejected connection from uid {}", peer_uid);
+        return;
+    }
+
     let mut buffer = [0; 4096];
     loop {
         match stream.read(&mut buffer) {

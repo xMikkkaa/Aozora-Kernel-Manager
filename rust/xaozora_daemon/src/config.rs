@@ -16,8 +16,9 @@
 
 use std::env;
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
+pub const APP_DATA_DIR: &str = "/data/data/com.xaozora.manager";
 pub const AUTD_DIR: &str = "autd";
 pub const BATTMON_DIR: &str = "battmon";
 pub const AUTD_BASE_MODE_PATH: &str = "autd/autd_base_mode";
@@ -57,16 +58,35 @@ pub fn setup_android_env() {
     }
 }
 
+pub fn app_owner_ids() -> Option<(u32, u32)> {
+    fs::metadata(APP_DATA_DIR)
+        .ok()
+        .map(|metadata| (metadata.uid(), metadata.gid()))
+}
+
+fn apply_owner_and_mode(path: &str, owned_mode: u32, fallback_mode: u32) {
+    let chowned = app_owner_ids()
+        .and_then(|(uid, gid)| {
+            std::ffi::CString::new(path)
+                .ok()
+                .map(|c_path| unsafe { libc::chown(c_path.as_ptr(), uid, gid) } == 0)
+        })
+        .unwrap_or(false);
+
+    let mode = if chowned { owned_mode } else { fallback_mode };
+    if let Ok(metadata) = fs::metadata(path) {
+        let mut perms = metadata.permissions();
+        perms.set_mode(mode);
+        let _ = fs::set_permissions(path, perms);
+    }
+}
+
 pub fn ensure_app_dir() {
     if let Err(e) = fs::create_dir_all(AUTD_DIR) {
         eprintln!("autd: Failed to create AUTD_DIR: {}", e);
     }
 
-    if let Ok(metadata) = fs::metadata(AUTD_DIR) {
-        let mut perms = metadata.permissions();
-        perms.set_mode(0o777);
-        let _ = fs::set_permissions(AUTD_DIR, perms);
-    }
+    apply_owner_and_mode(AUTD_DIR, 0o750, 0o755);
 }
 
 pub fn ensure_battmon_dir() {
@@ -75,9 +95,22 @@ pub fn ensure_battmon_dir() {
         return;
     }
 
-    if let Ok(metadata) = fs::metadata(BATTMON_DIR) {
-        let mut perms = metadata.permissions();
-        perms.set_mode(0o777);
-        let _ = fs::set_permissions(BATTMON_DIR, perms);
-    }
+    apply_owner_and_mode(BATTMON_DIR, 0o750, 0o755);
+}
+
+pub fn write_pid_file(path: &str, pid: u32) -> std::io::Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let tmp_path = format!("{}.tmp", path);
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&tmp_path)?;
+    file.write_all(pid.to_string().as_bytes())?;
+    file.sync_all()?;
+    drop(file);
+    fs::rename(&tmp_path, path)
 }

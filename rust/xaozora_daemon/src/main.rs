@@ -83,7 +83,7 @@ fn main() {
             }
         }
     }
-    let _ = fs::write(&pid_path, std::process::id().to_string());
+    let _ = config::write_pid_file(&pid_path, std::process::id());
 
     let mut handles = vec![];
 
