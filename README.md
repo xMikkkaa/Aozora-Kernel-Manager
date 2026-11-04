@@ -54,7 +54,7 @@ Aozora Kernel Manager is a native Android application built with **Kotlin** and 
 - Toast notifications on automatic profile switches
 
 ### 🔧 Kernel Tweaks
-- **RAM Flush**: Kills high-OOM background apps, drops caches, compacts memory, force-stops third-party apps, and runs `fstrim`
+- **RAM Flush**: Kills high-OOM background apps, drops caches, compacts memory, and force-stops third-party apps
 - **Game Thread Optimization**: Dedicates big/prime cores to game processes via `/dev/cpuset/game-mode`
 - **HYDRA Kernel Affinity**: Zero-latency kernel-space thread scheduling for supported kernels (`/proc/sys/kernel/hydra_pid` — separate from the Aozora-Rupture tuning engine)
 - **Sched Library Optimization**: Forces kernel scheduler awareness for game engine libraries (Unity, Unreal, Godot, Cocos2d, etc.)
@@ -78,7 +78,7 @@ Aozora Kernel Manager is a native Android application built with **Kotlin** and 
 
 ### 🔄 In-App Updates
 - Automatic GitHub release version checking
-- One-tap APK download and silent root installation
+- One-tap APK download with SHA-256, package-name, and signing-certificate verification before a root `pm install -r`
 
 ### 🎨 UI / UX
 - Glassmorphic design powered by [Haze](https://github.com/chrisbanes/haze) blur effects
