@@ -56,6 +56,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
+private const val AUTD_INFO_CACHE_MS = 30_000L
+
 @Composable
 fun SettingsScreen(
     hazeState: HazeState,
@@ -109,13 +111,21 @@ fun SettingsScreen(
     }
 
     LaunchedEffect(autdEnabled) {
-        if (autdEnabled) {
-            while(true) {
-                withContext(Dispatchers.IO) {
-                    try {
+        if (!autdEnabled) {
+            awakeMethod = ""
+            autdArmed = null
+            return@LaunchedEffect
+        }
+
+        var lastInfoReadAt = 0L
+        while(true) {
+            withContext(Dispatchers.IO) {
+                try {
+                    val now = System.currentTimeMillis()
+                    if (now - lastInfoReadAt >= AUTD_INFO_CACHE_MS) {
+                        lastInfoReadAt = now
                         val file = java.io.File(context.filesDir, "autd/autd_awake_method.info")
-                        var content = ""
-                        content = try {
+                        val content = try {
                             file.readText().trim()
                         } catch (e: Exception) {
                             RootShellHelper.executeCmdAndGetOutput("cat '${file.absolutePath}'").trim()
@@ -123,16 +133,13 @@ fun SettingsScreen(
                         if (content.isNotBlank()) {
                             withContext(Dispatchers.Main) { awakeMethod = content }
                         }
-                        val armed = NativeDaemonManager.isAutdArmed()
-                        withContext(Dispatchers.Main) { autdArmed = armed }
-                    } catch (e: Exception) {
                     }
+                    val armed = NativeDaemonManager.isAutdArmed()
+                    withContext(Dispatchers.Main) { autdArmed = armed }
+                } catch (e: Exception) {
                 }
-                kotlinx.coroutines.delay(2000)
             }
-        } else {
-            awakeMethod = ""
-            autdArmed = null
+            kotlinx.coroutines.delay(5000)
         }
     }
 
