@@ -216,7 +216,7 @@ fun TweaksScreen(
             val success = RootShellHelper.executeCmd(cmd)
             if (success) {
                 scope.launch {
-                    snackbarHostState.showSnackbar("Flush RAM & Cache Cleared Successfully!")
+                    snackbarHostState.showSnackbar("RAM flushed and cache cleared.")
                 }
             } else {
                 scope.launch {
@@ -269,7 +269,7 @@ fun TweaksScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "This will clear system cache and trim storage.",
+                            text = "This will force-stop third-party apps, kill high-memory background processes, clear cached data, and trim storage. Unsaved app state may be lost.",
                             style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
                         )
                         Spacer(modifier = Modifier.height(24.dp))
