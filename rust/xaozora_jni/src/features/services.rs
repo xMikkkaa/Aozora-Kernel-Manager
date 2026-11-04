@@ -65,30 +65,6 @@ pub fn get_available_profiles_for_files_dir(files_dir: &str) -> Vec<String> {
         .collect()
 }
 
-pub fn get_active_profile() -> String {
-    let status_path = "/data/data/com.xaozora.manager/files/autd/autd_status";
-    let content = read_system_file(status_path);
-    if !content.is_empty() {
-        content
-    } else {
-        "balance".to_string()
-    }
-}
-
-pub fn get_available_profiles() -> Vec<String> {
-    let mut profiles = vec!["powersave".to_string(), "balance".to_string()];
-
-    if check_file_exists("/system/bin/gaming") {
-        profiles.push("gaming".to_string());
-    }
-    if check_file_exists("/system/bin/gaming2") {
-        profiles.push("gaming2".to_string());
-    }
-    profiles.push("performance".to_string());
-
-    profiles
-}
-
 pub fn apply_profile(profile_id: &str) -> bool {
     let autd_dir = "/data/data/com.xaozora.manager/files/autd";
     let cmd = format!(
@@ -178,37 +154,6 @@ pub fn get_battery_notification_data() -> BatteryNotificationData {
 }
 
 // JNI bindings
-
-#[no_mangle]
-pub extern "system" fn Java_com_xaozora_manager_services_ProfileTileService_getActiveProfile<
-    'local,
->(
-    mut env: EnvUnowned<'local>,
-    _class: JClass,
-) -> jstring {
-    env.with_env(|env| -> jni::errors::Result<jstring> {
-        let profile = get_active_profile();
-        let output = env.new_string(profile).unwrap();
-        Ok(output.into_raw())
-    })
-    .resolve::<ThrowRuntimeExAndDefault>()
-}
-
-#[no_mangle]
-pub extern "system" fn Java_com_xaozora_manager_services_ProfileTileService_getAvailableProfilesJson<
-    'local,
->(
-    mut env: EnvUnowned<'local>,
-    _class: JClass,
-) -> jstring {
-    env.with_env(|env| -> jni::errors::Result<jstring> {
-        let profiles = get_available_profiles();
-        let json_str = serde_json::to_string(&profiles).unwrap_or_else(|_| "[]".to_string());
-        let output = env.new_string(json_str).unwrap();
-        Ok(output.into_raw())
-    })
-    .resolve::<ThrowRuntimeExAndDefault>()
-}
 
 #[no_mangle]
 pub extern "system" fn Java_com_xaozora_manager_services_ProfileTileService_getActiveProfileForFilesDir<
