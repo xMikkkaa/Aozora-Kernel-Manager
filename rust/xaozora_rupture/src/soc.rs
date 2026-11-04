@@ -180,7 +180,7 @@ fn mediatek_apply(mode: u8) {
         "ignore_thermal_protect",
         "ignore_pbm_limited",
     ] {
-        setvalue(lim_val, &format!("{} {}", pow_lim, key));
+        setvalue(&format!("{} {}", key, lim_val), pow_lim);
     }
 
     if mode == 4 {
