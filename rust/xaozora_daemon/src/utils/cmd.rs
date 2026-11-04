@@ -19,6 +19,14 @@ use std::process::{Command, Stdio};
 
 use crate::config;
 
+fn spawn_reaped(command: &mut Command) {
+    if let Ok(mut child) = command.spawn() {
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        });
+    }
+}
+
 fn queue_toast(msg: &str) {
     let msg = msg.replace(['\n', '\r'], " ");
     let mut lines: Vec<String> = fs::read_to_string(config::AUTD_TOAST_QUEUE_PATH)
@@ -36,7 +44,8 @@ fn queue_toast(msg: &str) {
 
 pub fn send_toast(msg: &str) {
     queue_toast(msg);
-    let _ = Command::new("am")
+    let mut command = Command::new("am");
+    command
         .args([
             "broadcast",
             "-a",
@@ -52,17 +61,16 @@ pub fn send_toast(msg: &str) {
             msg,
         ])
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn();
+        .stderr(Stdio::null());
+    spawn_reaped(&mut command);
 }
 
 pub fn apply_mode(mode: &str) {
     let helper_path = format!("/system/bin/{}", mode);
     if std::path::Path::new(&helper_path).exists() {
-        let _ = Command::new(mode)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn();
+        let mut command = Command::new(mode);
+        command.stdout(Stdio::null()).stderr(Stdio::null());
+        spawn_reaped(&mut command);
     } else {
         xaozora_rupture::apply_profile(mode);
     }
