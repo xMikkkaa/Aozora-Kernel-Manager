@@ -70,7 +70,7 @@ fun AozoraBottomNav(
 ) {
     val density = LocalDensity.current
 
-    val primaryScreens = remember(screens) { screens.filter { it != Screen.Settings } }
+    val primaryScreens = remember(screens) { screens.withIndex().filter { it.value != Screen.Settings } }
 
     val strongBlurStyle = rememberStrongBlur()
 
@@ -201,7 +201,7 @@ fun AozoraBottomNav(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        primaryScreens.forEachIndexed { index, screen ->
+                        primaryScreens.forEach { (index, screen) ->
                             Box(
                                 modifier = Modifier.onGloballyPositioned { coordinates ->
                                     itemOffsets[index] = coordinates.size.width.let {
