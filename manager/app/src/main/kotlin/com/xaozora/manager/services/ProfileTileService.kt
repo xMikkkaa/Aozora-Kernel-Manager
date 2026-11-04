@@ -32,8 +32,8 @@ class ProfileTileService : TileService() {
 
     private val gson = Gson()
 
-    private external fun getActiveProfile(): String
-    private external fun getAvailableProfilesJson(): String
+    private external fun getActiveProfileForFilesDir(filesDir: String): String
+    private external fun getAvailableProfilesJsonForFilesDir(filesDir: String): String
     private external fun applyProfile(profileId: String): Boolean
 
     override fun onStartListening() {
@@ -48,14 +48,17 @@ class ProfileTileService : TileService() {
             val prefs = getSharedPreferences("aozora_prefs", MODE_PRIVATE)
             val autdEnabled = prefs.getBoolean("autd_enabled", true)
             val autdExists = RootShellHelper.checkFileExists("${filesDir.path}/xaozora_daemon")
-            val helperBindMounted = RootShellHelper.checkFileExists("/system/bin/balance")
-            val isAvailable = autdEnabled && autdExists && helperBindMounted
+            val availableJson = runCatching {
+                getAvailableProfilesJsonForFilesDir(filesDir.absolutePath)
+            }.getOrDefault("[]")
+            val availableCount = gson.fromJson(availableJson, Array<String>::class.java)?.size ?: 0
+            val isAvailable = autdEnabled && autdExists && availableCount > 0
             
             withContext(Dispatchers.Main) {
                 if (isAvailable) {
                     tile.state = Tile.STATE_ACTIVE
                     try {
-                        val activeId = getActiveProfile()
+                        val activeId = getActiveProfileForFilesDir(filesDir.absolutePath)
                         val activeProfile = profiles.find { it.first == activeId }
                         tile.subtitle = activeProfile?.second ?: activeId
                     } catch (e: Exception) {
@@ -83,7 +86,11 @@ class ProfileTileService : TileService() {
 
     private fun showProfileDialog() {
         CoroutineScope(Dispatchers.IO).launch {
-            val availableJson = getAvailableProfilesJson()
+            val availableJson = try {
+                getAvailableProfilesJsonForFilesDir(filesDir.absolutePath)
+            } catch (e: Exception) {
+                "[]"
+            }
             val availableProfilesRaw = gson.fromJson(availableJson, Array<String>::class.java)?.toList() ?: listOf()
             
             val availableProfiles = profiles.filter {
@@ -100,7 +107,7 @@ class ProfileTileService : TileService() {
 
                 var currentId = "balance"
                 try {
-                    currentId = getActiveProfile()
+                    currentId = getActiveProfileForFilesDir(filesDir.absolutePath)
                 } catch (e: Exception) {}
 
                 val primaryColor = try { 
